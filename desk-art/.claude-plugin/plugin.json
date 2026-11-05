@@ -1,6 +1,6 @@
 {
   "name": "desk-art",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Make character art with the image generators already on this Mac (Codex, Antigravity, the Gemini app), no API keys of its own, and file every picture into one inbox",
   "author": {
     "name": "Hunter Jolly"

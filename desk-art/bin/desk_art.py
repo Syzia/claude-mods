@@ -1471,17 +1471,28 @@ def agy_conversation_folders(conversation: str) -> List[str]:
             os.path.join(gemini_home(), "antigravity", "brain", conversation)]
 
 
+AGENT_LOG_FOLDER = ".system_generated"
+
+
+def is_agent_log(path: str) -> bool:
+    """agy keeps a log of its own steps under `.system_generated` in the conversation's folder. The log holds a
+    re-encoded copy of every picture the agent was shown (seen 6 Nov 2026: two style references came back there as
+    1920x1080 JPEGs and were filed as results). Those are not results."""
+    return AGENT_LOG_FOLDER in path.split(os.sep)
+
+
 def agy_new_files(job: Job, conversation: Optional[str], before: Dict[str, Tuple[int, int]]) -> List[str]:
     """Files that are new or changed since the snapshot and can belong to this run. When the run named its
     conversation, only the work folder and that conversation's own folder count: the Antigravity app may be
     saving pictures for the owner at the same time. Without an id the wide folders are compared (agy_roots).
-    The copied references are not results."""
+    The copied references and the agent's own log are not results."""
     if conversation:
         roots = [(job.work, 6)] + [(folder, 4) for folder in agy_conversation_folders(conversation)]
     else:
         roots = agy_roots(job.work)
     refs_dir = os.path.join(job.work, "refs") + os.sep
-    return [path for path in changed_since(before, snapshot(roots)) if not path.startswith(refs_dir)]
+    return [path for path in changed_since(before, snapshot(roots))
+            if not path.startswith(refs_dir) and not is_agent_log(path)]
 
 
 def agy_matched_by(conversation: Optional[str], pictures: List[Picture]) -> str:

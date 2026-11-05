@@ -425,6 +425,10 @@ if mode in ("copyref", "copyref-only"):                  # the real agent copies
             put(os.path.join(brain, "ref_copy_%d%s" % (time.time() * 1000, os.path.splitext(name)[1])), source.read())
 if mode == "copyref":
     put(os.path.join(brain, "result_%d.jpg" % (time.time() * 1000)), jpeg())
+if mode == "viewlog":                    # agy 1.5.0 also logs every picture it was shown, re-encoded, under .system_generated
+    for number, name in enumerate(ref_names):
+        put(os.path.join(brain, ".system_generated", "logs", "media", "step_%d_media_0.jpg" % (number + 2)), jpeg())
+    put(os.path.join(brain, "result_%d.jpg" % (time.time() * 1000)), jpeg())
 if mode == "both":
     data = png()
     put("out/pic.png", data)
@@ -1848,6 +1852,15 @@ class AgyTests(SandboxCase):
         self.assertTrue(image["path"].endswith(".jpg"))
         self.assertEqual(len(self.sb.manifest()), 1)
 
+    def test_the_agents_log_copy_of_a_reference_is_not_a_result(self):
+        ref = self.sb.write_png(os.path.join(self.sb.home, "Pictures", "ref.png"), color=(9, 9, 9))
+        result = self.agy(extra=("--ref", ref), env={"FAKE_AGY_MODE": "viewlog"})
+        self.assertEqual(result.code, 0, result.out)
+        (image,) = result.data["images"]                                  # the real picture only, not the logged copy
+        self.assertNotIn(".system_generated", image["source"])
+        self.assertTrue(image["path"].endswith(".jpg"))
+        self.assertEqual(len(self.sb.manifest()), 1)
+
     def test_a_run_that_only_copied_its_reference_made_nothing(self):
         ref = self.sb.write_png(os.path.join(self.sb.home, "Pictures", "ref.png"), color=(9, 9, 9))
         result = self.agy(extra=("--ref", ref), env={"FAKE_AGY_MODE": "copyref-only"})
@@ -2942,6 +2955,14 @@ class ReferenceCopyTests(unittest.TestCase):
         staged = [desk_art.Staged("r.png", "/s/ref1.png", "png", "bb" * 32, 1)]
         self.assertEqual(desk_art.without_references([keep, copy], staged), [keep])
         self.assertEqual(desk_art.without_references([keep, copy], []), [keep, copy])
+
+
+class AgentLogTests(unittest.TestCase):
+    def test_only_a_path_inside_a_system_generated_folder_is_the_agents_own_log(self):
+        log = os.path.join("g", "brain", "c1", ".system_generated", "logs", "media", "step_2_media_0.jpg")
+        self.assertTrue(desk_art.is_agent_log(log))
+        self.assertFalse(desk_art.is_agent_log(os.path.join("g", "brain", "c1", "vending_machine_1.jpg")))
+        self.assertFalse(desk_art.is_agent_log(os.path.join("g", "brain", "c1", "my.system_generated.jpg")))
 
 
 class OpenRegularTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 # desk-art
 
-Version 0.1.3
+Version 0.1.4
 
 desk-art is a Claude Code mod. It lets Claude make character art with image programs that are already on your Mac and already signed in. You do not need an API key: each program uses your own sign-in. It does not use web-browser generators such as Grok in a browser.
 
@@ -188,6 +188,10 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | The picture is the wrong shape. | The generator may not follow the shape exactly. Ask again and say the shape in the prompt. |
 | You cannot find a picture. | Type `/desk-art` to see the inbox path. Look in the folder for today's date. Search `manifest.jsonl` for your label. |
 | A message that says `helper failed` | Paste the whole message to Claude. It is a problem with the helper program, not with your pictures. If it says the answer was cut, look in the inbox: the pictures may still be filed. |
+
+## Changes in 0.1.4
+
+- Antigravity's own log of the pictures it was shown is no longer filed as a result. When it is given reference pictures it keeps a re-encoded copy of each one in a hidden `.system_generated` folder inside its conversation folder, and the old check, which only compared exact bytes, let those copies through. Found on 6 Nov 2026, when two copies of the game's Courtyard and Classroom pictures were filed beside the real results.
 
 ## Changes in 0.1.3
 
