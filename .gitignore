@@ -1,0 +1,14 @@
+# What the mods write while they run. The session snapshots hold task text and paths.
+office-feed/*
+!office-feed/.gitkeep
+
+# Dependencies: "npm install" in office-app brings them back from package-lock.json.
+node_modules/
+
+# Types the engine lays into a mod's folder every time it loads the mod.
+.claude-plugin/types/
+
+# Python and macOS leftovers.
+__pycache__/
+*.pyc
+.DS_Store

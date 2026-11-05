@@ -1,0 +1,19 @@
+{
+  "name": "hunter-mods",
+  "description": "Hunter's own Claude Code mods",
+  "owner": {
+    "name": "Hunter Jolly"
+  },
+  "plugins": [
+    {
+      "name": "agent-office",
+      "source": "./agent-office",
+      "description": "A tycoon office in a side panel, a status line, sounds, a daily /office-report, a 95% usage warning, and the live feed for the Agent Office app"
+    },
+    {
+      "name": "desk-art",
+      "source": "./desk-art",
+      "description": "Make character art with the image generators already on this Mac (Codex, Antigravity CLI, the Gemini app), no API keys of its own, and file every picture into one inbox"
+    }
+  ]
+}
