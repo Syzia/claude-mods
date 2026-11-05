@@ -12,12 +12,14 @@ This folder holds the Claude Code mods you use. A mod is an add-on that changes 
 
 ## The history: your backup of the mods
 
-Since 6 Nov 2026 this folder keeps a history. Each saved step of each mod is kept, so a bad edit or a deleted file can be undone. The history lives in a hidden folder called `.git` inside this one, on this Mac only. If the Mac itself were lost, the history would go with it. A private copy on GitHub would cover that. It is not set up.
+Since 6 Nov 2026 this folder keeps a history. Each saved step of each mod is kept, so a bad edit or a deleted file can be undone. The history lives in a hidden folder called `.git` inside this one.
 
-Kept in the history: the code and sounds of every mod, `office-app/save.json`, and these notes.
+A private copy is on GitHub, in your account: https://github.com/Syzia/claude-mods. Only you can see it. So losing this Mac would not lose the mods.
+
+Kept in the history and on GitHub: the code and sounds of every mod, `office-app/save.json` (your office's money, furniture and outfits), and these notes.
 Not kept: `office-feed` (the live snapshots hold task text and paths), `node_modules` (`npm install` brings it back) and the type files that Claude Code lays into a mod's folder itself.
 
-When Claude changes a mod here, it saves a new step afterwards. The versions are marked: `agent-office-v0.3.1` and `desk-art-v0.1.3`.
+When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1` and `desk-art-v0.1.3`.
 
 To look at it, type these in Terminal:
 1. The steps so far: `git -C ~/claude-mods log --oneline`
@@ -25,3 +27,13 @@ To look at it, type these in Terminal:
 3. Get one file back as it was at the last step: `git -C ~/claude-mods restore desk-art/README.md`
 
 For anything bigger, such as going back to an older version of a whole mod, ask Claude.
+
+## If you ever need the mods on a new Mac
+
+Tried on 6 Nov 2026 in a throwaway home folder: both mods installed from the GitHub copy and showed as enabled.
+
+1. Install GitHub's `gh` program (https://cli.github.com), then sign in with `gh auth login` and `gh auth setup-git`.
+2. Download the mods. Keep this exact place and name, because `agent-office` writes into it: `git clone https://github.com/Syzia/claude-mods ~/claude-mods`
+3. Tell Claude Code where they are: `claude plugin marketplace add ~/claude-mods`
+4. Install each mod: `claude plugin install agent-office@hunter-mods --scope user` and `claude plugin install desk-art@hunter-mods --scope user`. It may say some settings are "not yet set". They are optional, and the defaults work.
+5. Start a new Claude session. For the 3D office, install Node.js (https://nodejs.org), then double-click `office-app/Open Office.command`. The first run installs its 3D library by itself.
