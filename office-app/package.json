@@ -1,0 +1,14 @@
+{
+  "name": "agent-office-3d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A 3D tycoon office where your Claude agents work, play and spend their pay",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  }
+}
