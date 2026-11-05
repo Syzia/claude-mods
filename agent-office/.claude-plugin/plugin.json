@@ -1,0 +1,17 @@
+{
+  "name": "agent-office",
+  "version": "0.3.1",
+  "description": "A tycoon office in a side panel, a status line, sounds, a daily /office-report, a 95% usage warning, and the live feed for the Agent Office app",
+  "author": {
+    "name": "Hunter Jolly"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "sounds": {
+      "type": "boolean",
+      "title": "Sounds",
+      "description": "Play a chime when an agent finishes, a fanfare when the plan is done, and an alarm past 95% usage",
+      "default": true
+    }
+  }
+}
