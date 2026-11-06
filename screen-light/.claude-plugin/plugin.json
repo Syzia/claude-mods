@@ -1,7 +1,7 @@
 {
   "name": "screen-light",
-  "version": "0.1.1",
-  "description": "A small light on the right edge of the screen that shows when Claude has control of your Mac (full screen or working inside an app)",
+  "version": "0.2.0",
+  "description": "A small light on the right edge of the screen that shows when Claude has control of your Mac (full screen or working inside an app), with a pause button that stops Claude from using your screen until you resume",
   "author": {
     "name": "Hunter Jolly"
   }

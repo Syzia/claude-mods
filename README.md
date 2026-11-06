@@ -8,7 +8,7 @@ This folder holds the Claude Code mods you use. A mod is an add-on that changes 
 | `office-app` | The 3D office window that shows what `agent-office` sends it. Open it with `Open Office.command`. Your office's money, furniture and outfits are in `office-app/save.json` |
 | `office-feed` | One small file per session that `agent-office` writes for the 3D office while you work |
 | `desk-art` | Makes game art with Codex, Antigravity and the Gemini app, with no API keys |
-| `screen-light` | A small light on the right edge of your screen that shows when Claude has control of your Mac. Try it with `/screen-light demo` |
+| `screen-light` | A small light on the right edge of your screen that shows when Claude has control of your Mac, with Clawd the crab and a pause button that stops Claude from using your screen until you resume. Try it with `/screen-light demo` |
 | `.claude-plugin` | The list that tells Claude Code which mods are here |
 
 ## The history: your backup of the mods
@@ -20,7 +20,7 @@ A private copy is on GitHub, in your account: https://github.com/Syzia/claude-mo
 Kept in the history and on GitHub: the code and sounds of every mod, `office-app/save.json` (your office's money, furniture and outfits), and these notes.
 Not kept: `office-feed` (the live snapshots hold task text and paths), `node_modules` (`npm install` brings it back) and the type files that Claude Code lays into a mod's folder itself.
 
-When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1`, `desk-art-v0.1.6` and `screen-light-v0.1.1`.
+When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1`, `desk-art-v0.1.6` and `screen-light-v0.2.0`.
 
 To look at it, type these in Terminal:
 1. The steps so far: `git -C ~/claude-mods log --oneline`

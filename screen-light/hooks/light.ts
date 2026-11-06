@@ -1,8 +1,10 @@
 // screen-light: the logic, kept apart from the engine so the tests can run it without one.
 //
 // The mod watches the computer-use tools (the ones that let Claude work in other apps on this Mac) and keeps
-// one small state file per session. The Screen Light program (app/ScreenLight.swift) reads those files and
-// draws a light on the right edge of the screen. Nothing here ever changes a tool call or its answer.
+// one small state file per session. The Screen Light program (the Swift files in app/) reads those files and
+// draws a light on the right edge of the screen. Nothing here ever changes a tool call or its answer. The one thing
+// the mod does to a call, refusing it while the owner has paused screen control, is decided in ./register from what
+// `readPause` says about the pause file (at the end of this file).
 
 export type Mode = 'screen' | 'app' | 'idle'
 export type EndReason = 'released' | 'turn-ended' | 'stopped'
@@ -353,4 +355,60 @@ export class Tracker {
 /** A session id that is safe to use in a file name. */
 export function safeId(id: unknown): string {
   return typeof id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(id) ? id : 'session'
+}
+
+// ---------------------------------------------------------------------------
+// The pause: one small file, `pause.json`, shared by the light program (its button) and this mod (its commands).
+// ---------------------------------------------------------------------------
+
+/** Who wrote the pause file: the button on the light, or a /screen-light command. */
+export type PauseBy = 'light' | 'command'
+
+/** Why the pause file could not be understood; ./text has the plain words for each. */
+export type PauseWhy = 'unreadable' | 'empty' | 'garbled' | 'shape' | 'unclear' | 'folder'
+
+/**
+ * What the pause file says. A missing file and an explicit "paused": false are both free; "paused": true is paused
+ * (`at` is when it was written, if the file says); anything else cannot be trusted and is unknown, which the caller
+ * treats as paused, because when in doubt Claude must stop.
+ */
+export type PauseVerdict = { kind: 'free' } | { kind: 'paused'; at?: number } | { kind: 'unknown'; why: PauseWhy }
+
+/** Letting go is always allowed, paused or not; every other computer-use call is refused while paused. */
+export function mayRunWhilePaused(kind: Kind): boolean {
+  return kind === 'full-off' || kind === 'app-off'
+}
+
+/** The key the whole file is about, as it is written in the text (a quoted word, then a colon). */
+const PAUSED_KEY = /"paused"\s*:/g
+
+/**
+ * Reads the text of an existing pause file. It never throws: whatever is wrong with the text becomes `unknown`.
+ * Two things that a plain parse lets through are refused here, because the light program refuses them too and the two
+ * must never disagree about whether Claude is stopped: a byte that was not valid text (the engine hands it over as
+ * U+FFFD), and a file that names "paused" twice (a parse keeps the last one, the light program the first).
+ */
+export function readPause(text: unknown): PauseVerdict {
+  if (typeof text !== 'string') return { kind: 'unknown', why: 'unreadable' }
+  if (text.trim() === '') return { kind: 'unknown', why: 'empty' }
+  if (text.includes('�')) return { kind: 'unknown', why: 'garbled' }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { kind: 'unknown', why: 'garbled' }
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return { kind: 'unknown', why: 'shape' }
+  if ((text.match(PAUSED_KEY) ?? []).length > 1) return { kind: 'unknown', why: 'unclear' }
+  const record = parsed as Record<string, unknown>
+  const paused = record['paused']
+  if (paused === false) return { kind: 'free' }
+  if (paused !== true) return { kind: 'unknown', why: 'unclear' }
+  const at = record['at']
+  return typeof at === 'number' && Number.isFinite(at) && at >= 0 ? { kind: 'paused', at } : { kind: 'paused' }
+}
+
+/** The text of a pause file as this mod writes it (the light program writes the same four fields). */
+export function pauseFileText(paused: boolean, at: number, by: PauseBy): string {
+  return JSON.stringify({ v: 1, paused, at, by })
 }
