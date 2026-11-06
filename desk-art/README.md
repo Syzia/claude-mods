@@ -1,6 +1,6 @@
 # desk-art
 
-Version 0.1.5
+Version 0.1.6
 
 desk-art is a Claude Code mod. It lets Claude make character art with image programs that are already on your Mac and already signed in. You do not need an API key: each program uses your own sign-in. It does not use web-browser generators such as Grok in a browser.
 
@@ -175,7 +175,7 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | `codex-not-logged-in` | Open the ChatGPT app (Codex), sign in, then type `/desk-art`. |
 | `codex-not-found` | The ChatGPT app is not where the mod looks. Install or update it, open it once, then type `/desk-art`. |
 | `Unknown feature flag` in a `codex-failed` message, or `Codex hardening: NOT OK` in `/desk-art`. | An update to the ChatGPT app changed one of the Codex switches that desk-art needs. Tell Claude. desk-art needs an update. Do not ask Claude to work around it. |
-| `codex-no-images` or `agy-no-images` | The generator answered with words instead of a picture. Claude shows you the words. Read them. Claude will not work around a refusal. |
+| `codex-no-images` or `agy-no-images` | The generator answered with words instead of a picture. Claude shows you the words. Read them. If they say "quota" or "429", Google's image allowance is used up for now: wait about 15 minutes and try again, one job at a time. Claude will not work around a refusal. |
 | `codex-failed` or `agy-failed` | Claude shows you the error words. A limit message means wait and try later. For Codex, a finished picture may already exist: the message lists `Thread folder` and `Pictures already made`. Claude looks there before it runs again. |
 | `codex-timeout` or `agy-timeout` | The run took longer than the time limit (8 minutes by default). For Codex, pictures made before the stop are listed under `Pictures already made`, and Claude can file them with `ingest`. Otherwise try a simpler prompt. |
 | `bad-input` with "is not in a folder desk-art may send from" | The picture is outside the allowed folders. See "Reference pictures": copy it into one of them, use the Downloads way, or change the "Folders pictures may be sent from" setting. |
@@ -188,6 +188,11 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | The picture is the wrong shape. | The generator may not follow the shape exactly. Ask again and say the shape in the prompt. |
 | You cannot find a picture. | Type `/desk-art` to see the inbox path. Look in the folder for today's date. Search `manifest.jsonl` for your label. |
 | A message that says `helper failed` | Paste the whole message to Claude. It is a problem with the helper program, not with your pictures. If it says the answer was cut, look in the inbox: the pictures may still be filed. |
+
+## Changes in 0.1.6
+
+- A new page, `skills/desk-art/references/model-comparison.md`: a blind comparison of the routes on three backgrounds from your own approved set and on three sprites (an expression change, an outfit change and face close-ups), with the scores, the limits that showed up and the exact prompts. The short answer: Codex first for backgrounds and for full-body edits of a sprite; for faces, one Codex run and one Antigravity run and keep the closer one; leave Antigravity's `model` out. `SKILL.md` carries that as a routing list.
+- New notes on Antigravity's limits: it can run out of image quota (HTTP 429; wait about 15 minutes), a big agent model can take over 5 minutes, and a run can time out. The troubleshooting table says so.
 
 ## Changes in 0.1.5
 
@@ -232,6 +237,6 @@ desk-art/
   hooks/                            the code that gives Claude its tools and the /desk-art command
   bin/desk_art.py                   the helper program: runs the generators and files pictures
   skills/desk-art/SKILL.md          Claude's instructions for making art
-  skills/desk-art/references/       one guide per route: codex, antigravity, gemini-computer-use; and recipes.md (prompts that worked)
+  skills/desk-art/references/       one guide per route: codex, antigravity, gemini-computer-use; recipes.md (prompts that worked) and model-comparison.md (which route for what)
   tests/ and bin/test_desk_art.py   checks for the code
 ```
