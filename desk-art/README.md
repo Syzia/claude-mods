@@ -1,6 +1,6 @@
 # desk-art
 
-Version 0.1.4
+Version 0.1.5
 
 desk-art is a Claude Code mod. It lets Claude make character art with image programs that are already on your Mac and already signed in. You do not need an API key: each program uses your own sign-in. It does not use web-browser generators such as Grok in a browser.
 
@@ -189,6 +189,11 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | You cannot find a picture. | Type `/desk-art` to see the inbox path. Look in the folder for today's date. Search `manifest.jsonl` for your label. |
 | A message that says `helper failed` | Paste the whole message to Claude. It is a problem with the helper program, not with your pictures. If it says the answer was cut, look in the inbox: the pictures may still be filed. |
 
+## Changes in 0.1.5
+
+- A new page, `skills/desk-art/references/recipes.md`: the prompts that worked on two real jobs (a new background from the game's own brief, with and without style pictures, and an expression change on a sprite), what came back from each route, how the results were judged blind, and the tips that job taught. Claude reads it before a background or an expression change.
+- The route table in `SKILL.md` now says Codex and Antigravity made a real sprite and a real background on 6 Nov 2026.
+
 ## Changes in 0.1.4
 
 - Antigravity's own log of the pictures it was shown is no longer filed as a result. When it is given reference pictures it keeps a re-encoded copy of each one in a hidden `.system_generated` folder inside its conversation folder, and the old check, which only compared exact bytes, let those copies through. Found on 6 Nov 2026, when two copies of the game's Courtyard and Classroom pictures were filed beside the real results.
@@ -227,6 +232,6 @@ desk-art/
   hooks/                            the code that gives Claude its tools and the /desk-art command
   bin/desk_art.py                   the helper program: runs the generators and files pictures
   skills/desk-art/SKILL.md          Claude's instructions for making art
-  skills/desk-art/references/       one guide per route: codex, antigravity, gemini-computer-use
+  skills/desk-art/references/       one guide per route: codex, antigravity, gemini-computer-use; and recipes.md (prompts that worked)
   tests/ and bin/test_desk_art.py   checks for the code
 ```
