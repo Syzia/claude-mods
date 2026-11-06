@@ -48,12 +48,12 @@ The Claude app already draws its own glowing border while Claude has full-screen
 
 From this folder:
 
-- `claude plugin validate .` and `claude plugin test .` run the mod's 69 engine tests.
+- `claude plugin validate .` and `claude plugin test .` run the mod's 71 engine tests.
 - `python3 -B -m unittest discover -s app` runs 18 tests of what the light decides to show (build the program first).
 
-## Honest limits (0.1.0, 6 Nov 2026)
+## Honest limits (0.1.1, 6 Nov 2026)
 
-- Tested: the mod's logic with the real tool names and real answer shapes taken from earlier sessions (69 engine tests); what the light shows for each state (18 tests); the program as a real window, started by `open`, reading the real state folder: it sits at the right edge of the screen, hands back and hides on time, and one launch only ever makes one light. A state file written by the mod's own code was fed to the program and it decided correctly.
+- Tested: the mod's logic with the real tool names and real answer shapes taken from earlier sessions (69 engine tests); what the light shows for each state (18 tests); the program as a real window, started by `open`, reading the real state folder: it sits at the right edge of the screen, hands back and hides on time, and one launch only ever makes one light. A state file written by the mod's own code was fed to the program and it decided correctly. A fresh Claude process loaded the installed mod and ran `/screen-light status` and `/screen-light demo` for real: the file was written and the light came up.
 - **Not yet tested with a real computer-use session.** The session that built this one has no computer-use tools. The first real use of Claude controlling an app is the real test: if the light stays dark then, the thing to check is `/screen-light status` and the log line `screen-light:` in `claude --debug`.
 - It watches sessions that run on this Mac (the Claude desktop app's Code tab, and the terminal). A cloud session that drives your Mac from far away runs somewhere else, so a mod on this Mac does not see it.
 - It is a light, not a switch: it cannot stop Claude. To stop Claude, use the stop button in the Claude app.
@@ -66,4 +66,5 @@ From this folder:
 
 ## Changes
 
+- **0.1.1** (6 Nov 2026): a session that never used the screen no longer leaves a small file behind when it ends (found when a real headless run left two). Checked live in a fresh Claude process: `/screen-light status` and `/screen-light demo` worked from the installed mod, wrote the file and started the real light.
 - **0.1.0** (6 Nov 2026): first version.

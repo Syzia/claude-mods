@@ -1,6 +1,6 @@
 {
   "name": "screen-light",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A small light on the right edge of the screen that shows when Claude has control of your Mac (full screen or working inside an app)",
   "author": {
     "name": "Hunter Jolly"

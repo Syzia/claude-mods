@@ -183,6 +183,8 @@ export class Tracker {
   private lastLaunch = Number.NEGATIVE_INFINITY
   private chain: Promise<void> = Promise.resolve()
   private reported = false
+  /** Whether this session ever wrote a file; one that never did has nothing to clear. */
+  private published = false
 
   constructor(private readonly session: string) {}
 
@@ -294,6 +296,7 @@ export class Tracker {
 
   /** The session is ending: the light goes at once, with no note. */
   async stop(io: Io): Promise<void> {
+    if (!this.published) return
     const now = await io.now()
     this.screen = false
     this.apps.clear()
@@ -328,6 +331,7 @@ export class Tracker {
 
   /** Writes the state; writes run one after another so an old one never lands after a newer one. */
   private publish(io: Io, now: number): Promise<void> {
+    this.published = true
     const launch = this.isHolding() && now - this.lastLaunch >= RELAUNCH_MS
     if (launch) this.lastLaunch = now
     const text = JSON.stringify(this.snapshot(now))

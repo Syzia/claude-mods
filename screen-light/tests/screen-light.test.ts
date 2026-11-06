@@ -327,6 +327,13 @@ describe('Tracker', () => {
     expect(r.last().ended).toBeUndefined()
   })
 
+  test('a session that never held control leaves no file behind when it ends', async () => {
+    const r = rig()
+    const t = new Tracker('s1')
+    await t.stop(r.io)
+    expect(r.writes.length).toBe(0)
+  })
+
   test('a write that fails is said once and never thrown, and later writes still go out', async () => {
     const r = rig()
     const t = new Tracker('s1')
@@ -483,6 +490,12 @@ test('ending the session clears the light and stops the beat', async ($, on) => 
   const count = h.states().length
   await h.clock.advance(20_000)
   expect(h.states().length).toBe(count)
+})
+
+test('a session that never used the screen writes nothing, not even when it ends', async ($, on) => {
+  const h = await boot($, on)
+  await $.session.end({ reason: 'other', sessionId: 'sess-1', resume: {} as never })
+  expect(h.writes.length).toBe(0)
 })
 
 test('a light that cannot be written never breaks the call, and is reported once', async ($, on) => {
