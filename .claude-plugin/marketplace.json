@@ -14,6 +14,11 @@
       "name": "desk-art",
       "source": "./desk-art",
       "description": "Make character art with the image generators already on this Mac (Codex, Antigravity CLI, the Gemini app), no API keys of its own, and file every picture into one inbox"
+    },
+    {
+      "name": "screen-light",
+      "source": "./screen-light",
+      "description": "A small light on the right edge of the screen that shows when Claude has control of your Mac, full screen or inside one app"
     }
   ]
 }

@@ -1,0 +1,6 @@
+# The built light program: rebuilt by app/build.sh (the mod builds it by itself the first time).
+app/Screen Light.app/
+.claude-plugin/types/
+__pycache__/
+*.pyc
+.DS_Store
