@@ -36,7 +36,7 @@ def run(*args, timeout=30):
 def session(**over):
     """A session that has full control right now, with the fields overridden."""
     base = {"v": 1, "session": "a", "mode": "screen", "busy": False,
-            "since": NOW - 30_000, "last": NOW - 1_000, "beat": NOW - 1_000}
+            "since": NOW - 30_000, "last": NOW - 1_000, "beat": NOW - 1_000, "pause": 1}
     base.update(over)
     return base
 
@@ -192,6 +192,41 @@ class PauseDecisionTests(unittest.TestCase):
         self.assertEqual(decide({"a.json": session()}, pause=pause_file(True))["look"], "paused")
         ended = session(mode="idle", ended=NOW - 500)
         self.assertEqual(decide({"a.json": ended}, pause=pause_file(True))["look"], "paused")
+
+    def test_an_older_session_that_holds_control_makes_the_paused_look_say_so(self):
+        usual = "Claude cannot use your screen until you resume"
+        older = "An older Claude session may ignore this pause"
+        # A file from a mod older than the pause has no "pause" field: that session would go on using the screen.
+        for mode in ("screen", "app"):
+            files = {"a.json": {k: v for k, v in session(mode=mode).items() if k != "pause"}}
+            d = decide(files, pause=pause_file(True))
+            self.assertEqual((d["look"], d["button"], d["title"], d["detail"]), ("paused", "resume", "Screen control is paused", older))
+        # one that obeys leaves the usual words, and so does a mix where only one is old
+        self.assertEqual(decide({"a.json": session()}, pause=pause_file(True))["detail"], usual)
+        mixed = {"a.json": session(), "b.json": {k: v for k, v in session(session="b").items() if k != "pause"}}
+        self.assertEqual(decide(mixed, pause=pause_file(True))["detail"], older)
+
+    def test_an_older_session_is_only_a_warning_while_it_is_live_and_holds_control(self):
+        usual = "Claude cannot use your screen until you resume"
+        old = lambda **over: {k: v for k, v in session(**over).items() if k != "pause"}
+        # not holding anything, or not heard from for more than 20 s: nothing to warn about
+        self.assertEqual(decide({"a.json": old(mode="idle")}, pause=pause_file(True))["detail"], usual)
+        self.assertEqual(decide({"a.json": old(beat=NOW - 21_000)}, pause=pause_file(True))["detail"], usual)
+        self.assertEqual(decide({"a.json": old(beat=NOW - 19_000)}, pause=pause_file(True))["detail"],
+                         "An older Claude session may ignore this pause")
+        # not paused: the warning does not exist (the light shows its ordinary looks)
+        self.assertEqual(decide({"a.json": old()})["look"], "screen")
+
+    def test_the_older_session_warning_also_shows_when_the_pause_file_cannot_be_read(self):
+        old = {k: v for k, v in session().items() if k != "pause"}
+        d = decide({"a.json": old}, pause="{ not json")
+        self.assertEqual((d["look"], d["detail"]), ("paused", "An older Claude session may ignore this pause"))
+
+    def test_only_a_pause_field_of_one_or_more_counts_as_obeying(self):
+        older = "An older Claude session may ignore this pause"
+        for value, warns in ((1, False), (2, False), (0, True), (True, True), ("yes", True), (None, True)):
+            d = decide({"a.json": session(pause=value)}, pause=pause_file(True))
+            self.assertEqual(d["detail"] == older, warns, "pause=%r" % (value,))
 
     def test_a_paused_file_with_no_time_still_pauses(self):
         d = decide({}, pause='{"v":1,"paused":true}')
@@ -563,7 +598,7 @@ class PictureTests(unittest.TestCase):
 
     def test_snapshots_have_the_documented_sizes(self):
         # Points times two: the lights are 700 pt wide and 100 pt tall each; the sheet is 800 x 656 pt.
-        sizes = {"all": (1400, 1000), "sheet": (1600, 1312), "hover": (1400, 400), "text": (1400, 800),
+        sizes = {"all": (1400, 1000), "sheet": (1600, 1312), "hover": (1400, 400), "text": (1400, 1000),
                  "screen": (1400, 200), "app": (1400, 200), "done": (1400, 200), "paused": (1400, 200),
                  "resumed": (1400, 200)}
         with tempfile.TemporaryDirectory() as folder:

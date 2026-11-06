@@ -158,6 +158,7 @@ def main():
     live = [v for v in files.values() if isinstance(v, dict) and v.get("mode") == "app"]
     check("A1 a running call writes a state file in app mode", len(live) == 1 and live[0].get("busy") is True and live[0].get("app") == "Gemini", json.dumps(files))
     check("A2 the call's description is shown", bool(live) and live[0].get("what") == "Looks at the Gemini window", json.dumps(live))
+    check("A2b the state file says the mod refuses calls while paused", bool(live) and live[0].get("pause") == 1, json.dumps(live))
     d = decide()
     check("A3 the light decides 'app' with a pause button", d.get("look") == "app" and d.get("button") == "pause", json.dumps(d))
     check("A4 the light program is up with a window", len(windows()) >= 1, json.dumps(windows()))
@@ -175,6 +176,17 @@ def main():
     check("B4 the refused call never ran", len(fake_calls()) == before, json.dumps(fake_calls()[before:]))
     d = decide()
     check("B5 the light decides 'paused' with a resume button", d.get("look") == "paused" and d.get("button") == "resume", json.dumps(d))
+    # A Claude session opened before the update still runs the old mod: its state file has no "pause" marker and the pause
+    # cannot stop it, so the paused light says so while that session holds control.
+    now_ms = int(time.time() * 1000)
+    old_path = ROOT + "/state/old-mod.json"
+    with open(old_path, "w") as handle:
+        json.dump({"v": 1, "session": "old-mod", "mode": "screen", "busy": True, "since": now_ms, "last": now_ms, "beat": now_ms}, handle)
+    d = decide()
+    check("B5b an older session holding control makes the paused light say so", d.get("look") == "paused" and "older Claude session" in d.get("detail", ""), json.dumps(d))
+    os.remove(old_path)
+    d = decide()
+    check("B5c without it the paused light has its usual words", d.get("detail") == "Claude cannot use your screen until you resume", json.dumps(d))
     time.sleep(1.0)
     check("B6 the paused light has a window on screen", len(windows()) >= 1, json.dumps(windows()))
     for tool, args in (("computer_batch", {"actions": [{"action": "left_click"}]}), ("request_full_control", {}), ("request_access", {"apps": ["x"], "reason": "t"}), ("list_apps", {})):

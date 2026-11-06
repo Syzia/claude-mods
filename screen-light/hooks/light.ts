@@ -28,6 +28,12 @@ export type LightState = {
   /** When control was handed back, so the light can say so for a few seconds. */
   ended?: number
   reason?: EndReason
+  /**
+   * 1 means the mod that wrote this file refuses computer-use calls while paused. A file without it comes from a mod older
+   * than the pause (a session opened before the update keeps the old mod until it is restarted), and the light says so on
+   * its red look while such a session holds control, because the pause cannot stop it.
+   */
+  pause: 1
 }
 
 /** The program drops a session that has not written for 20 s; a beat every 5 s keeps a quiet one alive. */
@@ -201,7 +207,7 @@ export class Tracker {
   /** The state as the light program would read it now (what is written, without writing it). */
   snapshot(now: number): LightState {
     const mode = this.mode()
-    const state: LightState = { v: 1, session: this.session, mode, busy: this.inFlight > 0, since: this.since, last: this.last, beat: now }
+    const state: LightState = { v: 1, session: this.session, mode, busy: this.inFlight > 0, since: this.since, last: this.last, beat: now, pause: 1 }
     if (mode !== 'idle' && this.what !== undefined) state.what = this.what
     if (mode === 'app') {
       const key = this.recentApp !== undefined && this.apps.has(this.recentApp) ? this.recentApp : [...this.apps].pop()

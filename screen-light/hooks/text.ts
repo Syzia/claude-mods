@@ -10,7 +10,8 @@ export const COMMAND_HINT = '[demo | status | pause | resume | build | help]'
  * Said in the help and in the demo reply. A Claude session that was already open when the mod was updated keeps the old
  * mod (hooks load when a session starts), and the old mod never checks the pause, so only a restart fixes that.
  */
-export const RESTART_NOTE = 'If a Claude session was already open when you updated Screen Light, restart it. Until you do, the pause cannot stop it.'
+export const RESTART_NOTE =
+  'If a Claude session was already open when you updated Screen Light, restart it. Until you do, the pause cannot stop it, and the red light says so while such a session is using your screen.'
 
 export const HELP_TEXT = [
   'Screen Light shows a small light on the right edge of your screen while Claude has control of your Mac.',

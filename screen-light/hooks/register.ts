@@ -182,7 +182,7 @@ async function runDemo($: EngineInterface, paths: Paths): Promise<string> {
   const file = `${paths.stateDir}/demo.json`
   const start = await $.clock.now()
   const frame = (now: number, over: Partial<LightState>): string =>
-    JSON.stringify({ v: 1, session: 'demo', mode: 'idle', busy: false, since: start, last: now, beat: now, ...over })
+    JSON.stringify({ v: 1, session: 'demo', mode: 'idle', busy: false, since: start, last: now, beat: now, pause: 1, ...over })
   await $.fs.write(file, frame(start, { mode: 'screen', busy: true, what: 'Clicks the Send button' }))
   const run = await startLight($, paths)
   if (run.exitCode !== 0) return `${NOT_BUILT_TEXT}\n(open said: ${plain(run.stderr, 160) ?? `exit ${run.exitCode}`})`

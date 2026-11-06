@@ -315,6 +315,23 @@ describe('Tracker', () => {
     expect(r.launches.length).toBe(1)
   })
 
+  test('every state file says the mod that wrote it refuses calls while paused, so the light can tell an older mod from this one', async () => {
+    const r = rig()
+    const t = new Tracker('s1')
+    const input: CallInput = { app: GEMINI, action_summary: 'Looks' }
+    const token = await t.begin(r.io, call('app_click'), input)
+    r.tick(500)
+    await t.finish(r.io, call('app_click'), input, token, ok)
+    r.tick(500)
+    await t.beat(r.io)
+    r.tick(500)
+    await t.endTurn(r.io, 'turn-ended')
+    r.tick(500)
+    await t.stop(r.io)
+    expect(r.writes.length).toBeGreaterThanOrEqual(5)
+    for (const state of r.writes) expect(state.pause).toBe(1)
+  })
+
   test('with no description of its own a call is described from its name', async () => {
     const r = rig()
     const t = new Tracker('s1')
@@ -1303,6 +1320,7 @@ describe('/screen-light', () => {
     const demo = () => h.writes.filter(w => w.path.endsWith('/demo.json')).map(w => w.state)
     expect(demo().length).toBe(1)
     expect(demo()[0]).toMatchObject({ mode: 'screen', busy: true, what: 'Clicks the Send button', session: 'demo' })
+    for (const frame of demo()) expect(frame).toMatchObject({ pause: 1 })
     expect(h.runs.some(run => run[0] === '/usr/bin/open')).toBe(true)
     await h.clock.advance(4_000)
     expect(demo()[1]).toMatchObject({ mode: 'app', app: 'Gemini', since: T0 })

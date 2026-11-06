@@ -3,7 +3,10 @@
 //
 // The state file the mod writes for every Claude session (all times are milliseconds since 1970):
 //   { "v": 1, "session": "...", "mode": "screen" | "app" | "idle", "busy": true, "app": "Gemini",
-//     "what": "Opens the + menu", "since": 1, "last": 2, "beat": 3, "ended": 4, "reason": "released" }
+//     "what": "Opens the + menu", "since": 1, "last": 2, "beat": 3, "ended": 4, "reason": "released", "pause": 1 }
+// "pause": 1 says the mod that wrote the file refuses calls while paused. A file without it comes from a mod older than
+// the pause (a Claude session opened before the update keeps the old mod until it is restarted), which would go on
+// using the screen through a pause; the paused look says so while such a session is holding control.
 //
 // The pause file (one for the whole Mac, written by the light's button and by the /screen-light command):
 //   { "v": 1, "paused": true, "at": 1793938000000, "by": "light" | "command" }
@@ -40,6 +43,8 @@ struct Session {
     var beat = 0.0
     var ended: Double?
     var reason: String?
+    /// The mod that wrote this file refuses calls while paused ("pause": 1 or more in the file).
+    var obeysPause = false
 }
 
 enum Look: String {
@@ -100,6 +105,7 @@ func parse(_ data: Data, fallbackId: String) -> Session? {
     s.beat = number(object["beat"]) ?? 0
     s.ended = number(object["ended"])
     s.reason = clean(object["reason"], max: 20)
+    s.obeysPause = (number(object["pause"]) ?? 0) >= 1
     return s
 }
 
@@ -212,16 +218,25 @@ enum PauseFile {
 
 // MARK: - What the light shows
 
-private func pausedDecision(since: Double) -> Decision {
+/// What the paused look says while a session older than the pause is holding control (it cannot be stopped from here).
+let olderSessionDetail = "An older Claude session may ignore this pause"
+
+private func pausedDecision(since: Double, olderSession: Bool) -> Decision {
     Decision(look: .paused, title: "Screen control is paused",
-             detail: "Claude cannot use your screen until you resume", since: since, working: false, button: .resume)
+             detail: olderSession ? olderSessionDetail : "Claude cannot use your screen until you resume",
+             since: since, working: false, button: .resume)
+}
+
+/// A live session that holds control but was written by a mod older than the pause: it will go on using the screen.
+private func olderSessionIsActing(_ sessions: [Session], now: Double) -> Bool {
+    sessions.contains { now - $0.beat <= beatTimeout && ($0.mode == "screen" || $0.mode == "app") && !$0.obeysPause }
 }
 
 func decide(_ sessions: [Session], pause: PauseState = .none, now: Double) -> Decision {
     // 1. Paused (or not sure): always shown, whether or not anyone holds the screen.
     switch pause {
-    case .paused(let at): return pausedDecision(since: at)
-    case .unknown(let since): return pausedDecision(since: since)
+    case .paused(let at): return pausedDecision(since: at, olderSession: olderSessionIsActing(sessions, now: now))
+    case .unknown(let since): return pausedDecision(since: since, olderSession: olderSessionIsActing(sessions, now: now))
     case .none, .resumed: break
     }
 

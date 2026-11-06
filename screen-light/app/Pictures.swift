@@ -114,8 +114,8 @@ private func rows(for which: String) -> [Row] {
         // The pointer over the button: the words explain what it does.
         return [Row(look: .screen, hover: true), Row(look: .paused, hover: true)]
     case "text":
-        // Worst-case words: a long app name with a long clock, the no-name title, a very long detail line, and the
-        // note that shows when a press could not be saved.
+        // Worst-case words: a long app name with a long clock, the no-name title, a very long detail line, the
+        // note that shows when a press could not be saved, and the warning about a session older than the pause.
         var a = sample(.app)
         a.title = "Claude is in Adobe Photoshop 2025"
         a.detail = "Opens the File menu and chooses Export As"
@@ -126,8 +126,11 @@ private func rows(for which: String) -> [Row] {
         c.detail = String(repeating: "Types the prompt now. ", count: 4)
         var d = sample(.paused)
         d.detail = "Could not resume. Type /screen-light resume"
+        var e = sample(.paused)
+        e.detail = olderSessionDetail
         return [Row(look: .app, decision: a, clock: 5_025_001), Row(look: .app, decision: b),
-                Row(look: .screen, decision: c, clock: 5_025_001), Row(look: .paused, decision: d)]
+                Row(look: .screen, decision: c, clock: 5_025_001), Row(look: .paused, decision: d),
+                Row(look: .paused, decision: e)]
     case "all":
         return [.screen, .app, .done, .paused, .resumed].map { Row(look: $0) }
     default:
