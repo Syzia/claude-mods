@@ -1,6 +1,6 @@
 # desk-art
 
-Version 0.1.6
+Version 0.2.0
 
 desk-art is a Claude Code mod. It lets Claude make character art with image programs that are already on your Mac and already signed in. You do not need an API key: each program uses your own sign-in. It does not use web-browser generators such as Grok in a browser.
 
@@ -11,6 +11,7 @@ You do not run desk-art yourself. You ask Claude, in plain words. For example:
 - "Use desk-art to make a smiling version of this sprite." (Give the picture's path. It must be in one of the folders listed under "Reference pictures" below.)
 - "Make a night-time shrine background with desk-art."
 - "Make an icon for a talisman item."
+- "Keep Nanami looking like his Arc 1 Final art with desk-art." (Claude offers a saved reference set and waits for your yes; see "Anchor sets" below. It is optional: a one-off edit with a reference picture needs no set.)
 - "Is desk-art ready?"
 
 Claude writes the prompt, runs the generator, looks at every picture, and asks you which ones to keep. Then, with your yes, it hands the ones you keep to the game's own tools for cutting out and cleaning. For a new sprite that is `tools/keysprite.py --edge new` (see `docs/ASSET_PIPELINE.md` in the game folder, section "The cut-out's edge: new sprites only"). It puts the finished sprite into `game/images/char`, so Claude asks you before it runs it. `tools/arc1_cut.py` is only for the Arc 1 Final art.
@@ -31,7 +32,8 @@ Inside it:
 
 - One folder per day, named like `2026-11-04`.
 - Pictures named `label_route_number_fingerprint.png`. For example: `gojo-smile-v1_codex_01_3fa9c2d1.png`.
-- One notes file, `manifest.jsonl`. It has one line per picture: the time, the route, your label, the prompt (the first 4000 characters), the names of any reference pictures, the size, and a fingerprint (sha256).
+- One notes file, `manifest.jsonl`. It has one line per picture: the time, the route, your label, the prompt (the first 4000 characters), the names of any reference pictures, the size, and a fingerprint (sha256). The line for a picture made with an anchor set also records the set's name and the job of each of its pictures.
+- A folder called `anchors`, made the first time an anchor set is saved (see "Anchor sets" below). It holds one folder per set: the set's saved pictures and its file `anchor.json`. These are copies kept for reuse, not new pictures, so `/desk-art` does not count them as pictures filed.
 
 Nothing is overwritten. If the same picture arrives twice, it is filed once. One call files at most 16 pictures and 200 MB; if more come out, the result says how many were left unfiled. desk-art never moves or deletes an original. Codex keeps its own copy in its own folder.
 
@@ -109,6 +111,34 @@ To use a one-off picture, with your say:
 
 Every result from a generator run that used references lists the ones that were sent, for example `References sent to OpenAI: sprite.png (3fa9c2d1)`, so you can check.
 
+## Anchor sets: keeping pictures the same
+
+An anchor set is a small saved set of reference pictures (one to three) that Claude sends with every picture of the same thing, to help the pictures stay alike (this is not yet proven: see "What it cannot do" below). Each picture in a set has one job: the character to keep, a look to copy, the exact view to paint, the room that view is cut from, or the light of an hour. Sets are optional: Claude offers one when you ask to keep something looking the same across several pictures, and waits for your yes. A quick one-off edit with a reference picture needs no set. When you say yes, Claude first looks at the prepared pictures and zooms in on the parts that must not change, writes those colours and parts down (the "keep" line), saves the set once, shows it to you, and waits for your yes again. After that it asks the generator for pictures "with the set": the same pictures, in the same order, with the same words, every time. Before it sends anything, the mod checks that no saved picture has changed, and every result lists exactly what was sent.
+
+You do not run anything yourself. Ask in plain words, for example "Keep Nanami looking like his Arc 1 Final art" or "Make the evening version of the vending machine close-up". Claude uses the `desk-art:anchor` skill. After this update, start a new Claude session: tools and skills are given to a session when it starts. (`/reload-plugins` may be enough in an open session, but that has not been tried for a new tool argument; if Claude says `unknown argument "anchor"`, start a new session.)
+
+Where sets live: in a folder called `anchors` inside the art inbox, one folder per set (for example `anchors/nanami-final-v1/`), holding the pictures and a small file, `anchor.json`. A set is never changed: a change is a new version (`-v2`). desk-art never deletes a set. To remove one, delete its folder in Finder.
+
+What it cannot do: the generator still draws the picture. The same words given to Codex twice scored 6.2 on one run and 7.4 on the other on 6 Nov 2026 (blind scores from 0 to 10, the mean of two AI judges; the table is in `skills/desk-art/references/model-comparison.md`). A set keeps the inputs steady; it does not make the picture the same. This feature is UNVERIFIED: the first real test (about three Codex pictures, one at a time, each with your yes) has not been run. Until it has, Claude says "not yet proven" when it offers a set.
+
+### What to know before you trust it
+
+- UNVERIFIED: no real run has yet compared a saved set with doing the same job by hand. A set is meant to reduce drift (a picture wandering away from the original), not to remove it, because the same words scored 6.2 on one run and 7.4 on another; if the test fails, sets stay optional for that kind of picture.
+- The first sentence of the fixed words tells the generator to use each picture for its one job only. It is meant to stop a "look to copy" picture from lending its subject to the new picture, but no run has shown that it does (only backgrounds were tried as looks to copy), so a character picture is not supported as a look to copy.
+- Stored pictures are plain, with nothing see-through: a see-through picture is first flattened onto a flat background colour, and a colour profile (a note that says how to read the colours) is left out, which is right for your art because your art has none. How Codex, Antigravity and the Gemini app treat see-through parts of a reference picture is not documented.
+- A set holds three pictures at most, and one call carries six in all (the set plus any extra pictures). Up to three pictures in a call is the range that has been tried (only 1 of 111 earlier jobs used three); four to six are untested, and Codex documents no maximum.
+- Antigravity's default picture model may be a "Lite" one, which Google says is not built for several reference pictures, so use a set of one character picture there. In the Gemini app pick the Pro or Flash model, not Flash-Lite; that route is done by hand and sits outside every automatic check.
+- The fingerprint check is for accidents: it stops a changed, swapped or missing picture, but it cannot stop Claude, which can run programs, from saving a new set whose fingerprints match, so sets are only as honest as the session that made them. The inbox's notes file (manifest.jsonl) records which set each picture used and the fingerprint of that set's `anchor.json`; a picture counts as made by a generator only if its exact fingerprint is found in that file, so a generated picture that was re-saved or edited is not recognised as generated.
+- The keep line is free text. The set builder checks only that it is plain keyboard text (no accents or symbols) on one line, at most 300 characters, and free of the words the scope rule keeps out; Claude keeps the scope rule and writes no names in it.
+- The scope guard is an accident guard, not a lock. The set builder refuses file paths and words that look like the pictures the scope rule keeps out (including backgrounds and icons named for a pool, a bath or a sauna), but it reads names and words, not what a picture shows, so the scope rule stays Claude's job, and there is no "pose" kind of reference.
+- The measuring step prints numbers only, and no limits have been set for them yet; the first real runs will set them. Numbers point at what to look at; they never accept a picture.
+- The folder setting reaches the skill's programs only through Claude. The set builder and the program that makes pictures to look at cannot read the mod's settings, so Claude hands them your "Folders pictures may be sent from" list, and they can only narrow the game's four standard art folders. A folder you added outside those four is ignored; a picture from anywhere else goes in through the Downloads way, with your yes.
+- The set programs run in the terminal, not through the mod's own tools, so Claude Code may ask you to allow them the first few times. The mod's own tools never ask.
+- Tools and skills are given to a session when it starts, so a session that began before this update refuses `anchor` (`unknown argument "anchor"`) and does not have the anchor skill. Claude can then offer a new session, or the by-hand way, which sends the same pictures without the automatic check.
+- The mod deletes nothing, so sets pile up; you remove one by deleting its folder in Finder. A set keeps its own copy of the original, so after you redraw an original (the Arc 1 Final art was redrawn on 20 and 26 Oct 2026) the set still holds the old picture: when Claude shows a set it says so, and it offers a new version.
+- Codex's picture model is not settled: its docs say gpt-image-2, and an OpenAI note of 8 Sep 2026 says Images 2.5 is rolling out to Codex. Repeat the test after a ChatGPT app update.
+- A whole-body redraw is not a drop-in expression, because the game's expression sprites are one body with a different head. Making only a new head and joining it to the body with the game's own tool (`tools/arc1_final.py compose`) is untried for faces made by a generator.
+
 ## The /desk-art command
 
 | Type | What you get |
@@ -122,6 +152,7 @@ Any other word gets a short reminder of these three.
 ## What it will not do
 
 - It makes the game's plain art: clothed character sprites, expressions, outfits, backgrounds, items, icons and UI. It is not used for sexualised art of anyone. It is never used for swimwear, bikini, underwear, towel, bath, onsen, sauna, pool or beach pictures, lingerie-style pyjamas or "Ask for a pose" pictures of Nobara, Maki, Mai, Miwa or Momo (school students in the story, 16 and 17 in the source), and never for the pose-ladder sets of any character. When unsure, Claude asks you first. If a job drifts there, Claude stops and says so once. It does not suggest a way around it. The tools cannot check this. Claude checks it, because Claude writes every prompt.
+- An anchor set never holds a swimwear, bikini, underwear, towel, bath, onsen, sauna, pool or beach picture, a lingerie-style pyjama picture or an "Ask for a pose" picture of Nobara, Maki, Mai, Miwa or Momo, and there is no "pose" kind of reference. The set builder refuses file names and folders that look like those. It is an accident guard, not a lock: Claude still keeps the scope rule.
 - It does not control your screen by itself. It has no mouse or keyboard code. For the Gemini app, Claude uses the Computer use feature built into the Claude app, if you turn it on. That has its own permission screens.
 - It does not supply an API key. It never asks for one and never stores one. Each program uses your own sign-in, and key-like settings are removed from the programs desk-art starts (see "How it keeps your things safe").
 - It does not use private app doors. It does not read Codex's or Antigravity's sign-in files, tokens or settings. Antigravity has a private helper called `agentapi`. It is locked, and desk-art does not use it.
@@ -135,6 +166,8 @@ Any other word gets a short reminder of these three.
 - It never changes or deletes a file it reads from, including your reference pictures.
 - It copies only real pictures (PNG, JPEG or WEBP). A file it is given is opened first only to check its first bytes for a real picture, and a file named like a secrets or sign-in file (such as `.env` or `auth.json`) is refused before it is opened. It refuses files inside hidden folders at the top of your home folder and inside `~/Library`. The only exceptions are its own cache folder, and the picture folders that Codex and Antigravity keep for their own results (those two only when Claude files a picture with `ingest`).
 - It sends a reference picture only from the allowed folders (see "Reference pictures"). It copies each reference into the run's private work folder, checks the copy again, and gives the generator that copy. These copies are deleted after every run.
+- Anchor sets are stored inside the inbox (`anchors/`), which is always an allowed folder. Each stored picture is a copy of one named file from a folder pictures may be sent from, or from the inbox or the cache (the set builder honours your "Folders pictures may be sent from" setting but can only narrow it to the game's four standard art folders; a picture from anywhere else goes in through the Downloads way first), saved as a plain PNG with no hidden data such as notes or a colour profile. Before every send the mod copies the set's pictures into the run's private work folder like any other reference and refuses the run if a copy no longer matches the fingerprint saved with the set.
+- The helper program only reads sets. The only program that writes a set is the skill's set builder, which Claude runs in the terminal, not through the mod's own tools: it writes only inside `anchors/<name>/`, never writes through a link, never overwrites or deletes anything, writes `anchor.json` last, and refuses a folder that is not the art inbox. (It does read the picture files you name, inside the allowed folders, like the tools do.) Its pictures for you to look at (previews, contact sheets, zooms, a result beside the set) go to `~/Library/Caches/desk-art/anchor-looks/`, each under a new name. Because that part runs in the terminal and not through the mod's own tools, Claude Code may ask you to allow it the first few times.
 - Codex is held back in this order:
   1. Codex runs in read-only mode. Read-only means it cannot change files and cannot use the network. It can still read files and run read-only commands through its built-in code tool (picture making needs that tool).
   2. desk-art switches off Codex's browser, computer-use, web, app, plugin, sub-agent, goals and image-viewer tools, and its terminal tool. Checked on 4 Nov 2026: a test of the web failed, a test of writing a file failed, and reading a file still worked.
@@ -151,7 +184,7 @@ Any other word gets a short reminder of these three.
 
 ## What leaves your Mac
 
-desk-art itself sends nothing anywhere. The generator programs do. Codex sends your prompt and every reference picture to OpenAI. `agy` and the Gemini app send them to Google. With Computer use, screenshots of your screen go to Claude. Only pictures from the allowed folders (see "Reference pictures") can be sent as references. Do not put a picture in those folders that you would not want those companies to see.
+desk-art itself sends nothing anywhere. The generator programs do. Codex sends your prompt and every reference picture to OpenAI. `agy` and the Gemini app send them to Google. With Computer use, screenshots of your screen go to Claude. Only pictures from the allowed folders (see "Reference pictures") can be sent as references. Do not put a picture in those folders that you would not want those companies to see. Every picture in an anchor set is uploaded each time the set is used.
 
 ## Where it lives
 
@@ -164,7 +197,7 @@ It is installed for every Claude session, the same way as Agent Office. The fold
 3. Delete the `desk-art` mod folder (the folder that holds this README), and the `desk-art` entry in `~/claude-mods/.claude-plugin/marketplace.json`.
 4. Start a new Claude session.
 
-Installing the mod added one line to your Claude plugin list. The mod itself does not install a background program or store a login. Three things are left behind on purpose. Your pictures stay in the inbox until you delete them. A cache folder, `~/Library/Caches/desk-art`, may hold work folders from failed runs, and you can delete it any time. Copies of reference pictures in it are deleted after every run, but other job files stay. Codex keeps its own copy of every picture it made in `~/.codex/generated_images/`, and desk-art never deletes from it.
+Installing the mod added one line to your Claude plugin list. The mod itself does not install a background program or store a login. Three things are left behind on purpose. Your pictures stay in the inbox until you delete them, and so do your saved anchor sets (the `anchors` folder inside the inbox). A cache folder, `~/Library/Caches/desk-art`, may hold work folders from failed runs, and you can delete it any time. It also holds the pictures made for you to look at (`anchor-looks`). Copies of reference pictures in it are deleted after every run, but other job files stay. Codex keeps its own copy of every picture it made in `~/.codex/generated_images/`, and desk-art never deletes from it.
 
 ## Troubleshooting
 
@@ -180,7 +213,11 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | `codex-timeout` or `agy-timeout` | The run took longer than the time limit (8 minutes by default). For Codex, pictures made before the stop are listed under `Pictures already made`, and Claude can file them with `ingest`. Otherwise try a simpler prompt. |
 | `bad-input` with "is not in a folder desk-art may send from" | The picture is outside the allowed folders. See "Reference pictures": copy it into one of them, use the Downloads way, or change the "Folders pictures may be sent from" setting. |
 | `bad-input` with "unknown argument" | Claude used a name that the tool does not have. The message lists the names it takes. Ask Claude to try again. |
-| `inbox-unsafe` | The inbox folder is not allowed. Pick a folder inside your home folder, not inside a hidden folder at the top of it, and not in `~/Library`. |
+| `bad-input` with "anchor set ... was not found" | The name does not match a saved set. Ask Claude to list the saved sets. Nothing was sent. |
+| `bad-input` with "is not the picture that was saved" | A picture in a set changed after it was saved (nothing is allowed to change them). Nothing was sent. Ask Claude to save a new version of the set. |
+| `bad-input` with "is missing or is not a plain picture file" | A picture of a set is gone, or is no longer a picture (it was emptied or replaced). Nothing was sent. Ask Claude to save a new version of the set. |
+| `bad-input` with `unknown argument "anchor"` | This Claude session started before desk-art 0.2.0. Start a new session, or ask Claude for the by-hand way (it sends the same pictures without the automatic check). |
+| `inbox-unsafe` | The inbox folder is not allowed. Pick a folder inside your home folder, not inside a hidden folder at the top of it, and not in `~/Library`. If the message says the anchors folder, an anchor set or its `anchor.json` "is a link", something in the inbox is a shortcut that points somewhere else instead of a real folder or file. The inbox itself is fine: delete or rename that link in Finder, then ask again. Nothing was sent. |
 | `agy-not-installed` | Follow `skills/desk-art/references/antigravity.md`. |
 | `/desk-art` says Codex is logged in with an API key. | Tell Claude. This mod is built for the ChatGPT sign-in, and an API key would bill that key. |
 | `no-image-on-clipboard`, `osascript-failed` or `not-an-image` (Gemini app route) | The copy did not work, or the clipboard picture is not usable. Copy it again, or ask Claude to save the picture to a file instead. (In the Gemini app, the "Copy response" button under a picture copies the words only, so it always gives `no-image-on-clipboard`. The right way is to right-click the picture itself and choose Copy Image, or to press its copy icon when that shows: tested 5 Nov 2026.) |
@@ -188,6 +225,14 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | The picture is the wrong shape. | The generator may not follow the shape exactly. Ask again and say the shape in the prompt. |
 | You cannot find a picture. | Type `/desk-art` to see the inbox path. Look in the folder for today's date. Search `manifest.jsonl` for your label. |
 | A message that says `helper failed` | Paste the whole message to Claude. It is a problem with the helper program, not with your pictures. If it says the answer was cut, look in the inbox: the pictures may still be filed. |
+
+## Changes in 0.2.0
+
+- New: anchor sets and a second skill, `desk-art:anchor`. A set is one to three saved reference pictures with one job each (the character to keep, a look to copy, the exact view, its room, the light of an hour). `codex_image` and `agy_image` take an optional `anchor` (the set's name): the mod sends the set's pictures first, in order, with the same words every time, refuses to start if a saved picture changed, and writes the set into the notes file (manifest.jsonl) and into the result. The skill is offered only when you ask to keep something the same, previews and zooms before it saves a set (so the "keep" line is written after looking), builds sets from your own art, shows them to you, checks results against them and has a fixed answer for drift. It is UNVERIFIED until the test in `skills/anchor/references/proof-protocol.md` has been run.
+- Nothing changes for a call without `anchor`: the same words, the same pictures, the same notes.
+- `/desk-art` no longer counts the saved sets' pictures as pictures filed, and `/desk-art help` mentions anchors.
+- The helper program's own version number said 0.1.1 although the mod was 0.1.6; it now matches the mod, and a test keeps them equal.
+- Start a new Claude session to get the new argument and the new skill (`/reload-plugins` may do for an open one, but that is untried for a new tool argument).
 
 ## Changes in 0.1.6
 
@@ -238,5 +283,9 @@ desk-art/
   bin/desk_art.py                   the helper program: runs the generators and files pictures
   skills/desk-art/SKILL.md          Claude's instructions for making art
   skills/desk-art/references/       one guide per route: codex, antigravity, gemini-computer-use; recipes.md (prompts that worked) and model-comparison.md (which route for what)
+  skills/anchor/SKILL.md            Claude's instructions for anchor sets
+  skills/anchor/references/         classes.md (which pictures for which job), checking.md (how a result is checked), proof-protocol.md (the test that decides whether sets help)
+  skills/anchor/scripts/            anchor_set.py (previews, builds and shows sets) and anchor_look.py (pictures to look at, zooms, and numbers)
   tests/ and bin/test_desk_art.py   checks for the code
+  bin/test_anchor_*.py              checks for the anchor code
 ```

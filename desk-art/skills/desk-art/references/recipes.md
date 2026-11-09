@@ -85,3 +85,7 @@ The job: Nanami's smile, from `game/images/char/nanami_neutral.png` (RGBA, 760x1
 - Measure against the game's own pictures where you can: saturation and brightness (HSV mean) against the daytime backgrounds, and how busy the part behind a menu is (mean edge strength).
 - When two or more pictures compete, give them neutral names and the same size and let independent judges score them without knowing the source: one for the brief's own checks, one for defects, one for fit with the game's look.
 - Ask before installing. Installing is the owner's go: `tools/install_bg.py` for a background, `tools/keysprite.py --edge new` for a sprite.
+
+## 4. Anchor sets (0.2.0)
+
+Recipes 1 and 2 above were run by hand, with no saved set, and their numbers are the baselines that the live proof compares with. `skills/anchor/references/classes.md` turns the close-up, hour, style and figure recipes into saved anchor sets, and the `desk-art:anchor` skill says how to build and use them. Nothing in this section is verified until `skills/anchor/references/proof-protocol.md` has a PASS row in its Results table.

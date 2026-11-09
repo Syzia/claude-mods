@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""desk-art helper, version 0.1.1.
+"""desk-art helper, version 0.2.0.
 
 Files pictures made by image generators that are already installed and signed
 in on this Mac (Codex, the Antigravity CLI, the Gemini app) into one inbox
@@ -8,6 +8,7 @@ its own, no screen control. Standard library only (Python 3.9 syntax).
 
 Run as:  /usr/bin/python3 bin/desk_art.py <subcommand> [flags]
 Subcommands: status, codex, agy, ingest, wait-new, clip-image.  See --help.
+codex and agy also take --anchor NAME (a saved anchor set in <inbox>/anchors).
 
 Every call prints EXACTLY ONE JSON object on stdout (ASCII, single line).
 Diagnostics go to stderr. Exit codes:
@@ -46,7 +47,7 @@ import traceback
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
 # Limits and fixed texts
@@ -1001,7 +1002,7 @@ def image_record(path: str, picture: Picture, duplicate: bool) -> Dict[str, Any]
 def manifest_entry(inbox: str, dest: str, picture: Picture, backend: str, label: str,
                    job_id: str, provenance: Dict[str, Any]) -> Dict[str, Any]:
     prompt = provenance.get("prompt")
-    return {
+    entry = {
         "ts": utc_iso(), "backend": backend, "label": label, "jobId": job_id,
         "file": os.path.relpath(dest, inbox).replace(os.sep, "/"),
         "sha256": picture.sha256, "bytes": picture.size, "width": picture.width,
@@ -1013,7 +1014,10 @@ def manifest_entry(inbox: str, dest: str, picture: Picture, backend: str, label:
         "prompt": prompt[:MANIFEST_PROMPT_CHARS] if prompt else None,
         "refs": [{"name": ref.name, "sha256": ref.sha256} for ref in provenance.get("refs") or []],
         "note": provenance.get("note"),
-    }
+    }  # type: Dict[str, Any]
+    if provenance.get("anchor"):                         # only a row made with a set has this key, and it is last
+        entry["anchor"] = provenance["anchor"]
+    return entry
 
 
 def within_caps(ordered: List[Picture]) -> Tuple[List[Picture], int]:
@@ -1170,6 +1174,466 @@ def drop_staged_refs(job: Job) -> None:
 def refs_sent(staged: List[Staged]) -> List[Dict[str, Any]]:
     """What was handed to the generator, as the caller may show it to the owner."""
     return [{"name": ref.name, "sha8": ref.sha256[:8], "bytes": ref.size} for ref in staged]
+
+
+# ---------------------------------------------------------------------------
+# Anchor sets
+# ---------------------------------------------------------------------------
+# An anchor set is the folder <inbox>/anchors/<name>/: one to three prepared pictures (01_identity.png, ...) and a
+# card, anchor.json. This helper only READS sets; the skill's set builder is the one program that writes them. A call
+# with --anchor sends the set's pictures first, in saved order, then any --ref pictures, and puts fixed words (the
+# "block", built here from the card and never taken from the caller) in front of the caller's prompt.
+
+ANCHOR_FORMAT = 1
+ANCHOR_WORDS_VERSION = "1"
+ANCHOR_DIR_NAME = "anchors"
+ANCHOR_CARD_NAME = "anchor.json"
+ANCHOR_CARD_MAX_BYTES = 64 * 1024
+ANCHOR_MAX_MEMBERS = 3
+ANCHOR_KEEP_MAX = 300
+ANCHOR_NOTE_MAX = 200
+ANCHOR_ROLES = ("identity", "style", "place", "room", "light")
+ANCHOR_ROLE_LIMITS = {"identity": 1, "style": 2, "place": 1, "room": 1, "light": 1}
+ANCHOR_PROVENANCE = ("owner", "supplied", "generated")
+ANCHOR_CARD_KEYS = ("format", "name", "made", "keep", "note", "owner_said", "members")
+ANCHOR_MEMBER_KEYS = ("file", "role", "sha256", "size", "source", "prep", "provenance")
+ANCHOR_FILE_RE = re.compile(r"0[1-3]_(identity|style|place|room|light)\.png")
+ANCHOR_MADE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+ANCHOR_SHA_RE = re.compile(r"[0-9a-f]{64}")
+ANCHOR_PLAIN_RE = re.compile(r"[ -~]*")                  # printable ASCII only: no newline, no tab, nothing above ~
+ANCHOR_LIST_MAX = 100                                    # sets named by saved_anchor_names
+ANCHOR_HINT_NAMES = 10                                   # sets named in the hint of a missing set
+
+ANCHOR_INTRO = (
+    "REQUEST says otherwise for the reference pictures. They are numbered in the order they are attached or "
+    "listed. Each has one job, given below: use each picture for that job only and take nothing else from it.")
+
+ANCHOR_ROLE_TEXT = {
+    "identity": (
+        "the character to keep. Keep the face, hair, eyes, outfit, colours, body proportions and drawing style "
+        "exactly as drawn in it. Change only what the request below asks to change."),
+    "style": (
+        "copy only how it is drawn: the painting style, the colours and how strong they are, the lighting, the "
+        "line weight, the shading and the level of detail. Do not copy what it shows: not its subject, objects, "
+        "clothes, pose, composition or backdrop."),
+    "place": (
+        "the exact view to paint. Paint this same view again: the same objects, in the same places, at the same "
+        "sizes and angles, from the same camera position. Do not move, turn, add or remove an object. Change "
+        "only what the request below asks to change."),
+    "room": (
+        "the whole room that picture {place} is cut from. Take the painting style, the colours, the materials and "
+        "the daylight from it, and keep every object of picture {place} looking as it does here."),
+    "light": (
+        "copy only its light and the colour of its light, for this hour of the day. Only the light changes: keep "
+        "every object of picture {place} where it is, and do not copy what this picture shows."),
+}
+
+ANCHOR_NOW_MAKE = "\n\nNOW MAKE:\n"
+
+# The words the scope rule keeps out of anchor sets (an accident guard, not a lock). They are matched after
+# anchor_scope_word's normalisation at the START of a word. "outfits" is LAST on purpose: the folders that hold
+# swimwear, onsen and pyjama art are named "... outfits", and the more telling word should be named first.
+ANCHOR_SCOPE_WORDS = ("swim", "bikini", "underwear", "lingerie", "towel", "bath", "onsen", "sauna", "pool", "beach",
+                      "pyjama", "pajama", "romance pose", "ask for a pose", "pose ladder", "outfits")
+# How anchor_scope_word reads a name. ANCHOR_JOINS_RE finds the places where words are run together ("MakiSwim",
+# "NASAPool", "01swim": a capital after a small letter or a digit, a capitalised word after a run of capitals, a
+# letter after a digit). ANCHOR_SEPARATORS_RE is what counts as one space: white space, "_", "-", the dashes the Mac
+# types for a hyphen (U+2010 to U+2015) and the minus sign (U+2212). Those code points are written as numbers, so
+# that this file stays plain ASCII.
+ANCHOR_JOINS_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[0-9])(?=[A-Za-z])")
+ANCHOR_DASHES = "".join(chr(code) for code in list(range(0x2010, 0x2016)) + [0x2212])
+ANCHOR_SEPARATORS_RE = re.compile("[\\s_\\-" + ANCHOR_DASHES + "]+")
+
+# The refusals of a call that names a set (every one but the first ends with "Nothing was sent.").
+ANCHOR_NAME_ERROR = ("anchor must be the name of a saved anchor set: 1 to 40 characters, lower-case letters, digits, "
+                     "'_' or '-', starting with a letter or a digit")
+ANCHOR_LINK_HINT = "delete or rename that link, then try again"
+ANCHOR_NO_SETS_HINT = "No anchor sets are saved yet. Save one with the desk-art:anchor skill."
+ANCHOR_SAVE_AGAIN_HINT = "Save the set again under the next version name with the desk-art:anchor skill."
+ANCHOR_REPAIR_HINT = ("Save the set again under the next version name with the desk-art:anchor skill; "
+                      "do not edit a saved set.")
+ANCHOR_CHANGED_HINT = "Save a new version of the set with the desk-art:anchor skill; do not edit a saved set."
+
+AnchorMember = collections.namedtuple("AnchorMember", "pos role file path sha256 size")
+#   pos: 1-based int. path: absolute path of the stored file. size: (width, height) or None.
+AnchorSet = collections.namedtuple("AnchorSet", "name dir keep note made owner_said members card_sha256")
+#   dir: the real path of the set folder. members: list of AnchorMember in card order.
+#   card_sha256: the sha256 of the card file's bytes, as read (64 lowercase hex characters).
+
+
+class AnchorCardProblem(Exception):
+    """A card that parse_anchor_card refuses. `reason` is exactly one of the closed texts of the card rules."""
+
+    def __init__(self, reason: str) -> None:
+        Exception.__init__(self, reason)
+        self.reason = reason
+
+
+def check_anchor_name(value: str) -> str:
+    if not LABEL_RE.fullmatch(value):
+        raise Failure("bad-input", ANCHOR_NAME_ERROR)
+    return value
+
+
+def anchors_root(inbox: str) -> str:
+    """The folder that holds the sets. `inbox` is a real path, as prepare_inbox gives it."""
+    return os.path.join(inbox, ANCHOR_DIR_NAME)
+
+
+def anchor_scope_word(text: str) -> Optional[str]:
+    """The first word of ANCHOR_SCOPE_WORDS that starts a word in `text`, else None. The text is read the way the
+    Mac reads file names: Unicode look-alikes folded (full-width letters, ligatures), invisible format characters
+    (soft hyphen, zero-width space) dropped, case ignored, and white space, "_" and every kind of dash all one
+    space, so "Onsen outfits", "maki_swim.png", "Pose-Ladder" and "Pose" + en dash + "Ladder" are caught while
+    "consent" and "carpool" are not. It is read twice: as it stands, and with a space at each place where words
+    are run together ("MakiSwimwear", "01swim"), so a word that starts at a capital or after a digit is a word too."""
+    text = "".join(char for char in unicodedata.normalize("NFKC", text) if unicodedata.category(char) != "Cf")
+    readings = [ANCHOR_SEPARATORS_RE.sub(" ", reading.casefold()) for reading in (text, ANCHOR_JOINS_RE.sub(" ", text))]
+    for word in ANCHOR_SCOPE_WORDS:
+        if any(re.search(r"(?<!\w)" + re.escape(word), reading) for reading in readings):
+            return word
+    return None
+
+
+def anchor_scope_path_word(path: str) -> Optional[str]:
+    """anchor_scope_word for a path, judged from the home folder down: the home folder's own name never counts."""
+    full = abs_path(path)
+    for home in dict.fromkeys([home_dir().rstrip(os.sep), os.path.realpath(home_dir()).rstrip(os.sep)]):
+        if full == home:
+            return None
+        if full.startswith(home + os.sep):
+            full = full[len(home) + 1:]
+            break
+    return anchor_scope_word(full)
+
+
+def anchor_key_text(key: Any) -> str:
+    """A key of a card as it is shown in a refusal: at most 40 characters, anything but plain ASCII shown as ?."""
+    return "".join(char if " " <= char <= "~" else "?" for char in str(key)[:40])
+
+
+def anchor_plain_text(value: Any, low: int, high: int) -> bool:
+    """A string of plain ASCII (printable characters only, so a single line) with low to high characters."""
+    return isinstance(value, str) and low <= len(value) <= high and ANCHOR_PLAIN_RE.fullmatch(value) is not None
+
+
+def no_repeated_keys(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
+    found = dict(pairs)
+    if len(found) != len(pairs):
+        raise ValueError("a key is given twice")
+    return found
+
+
+def anchor_card_json(raw: bytes) -> Any:
+    """The JSON in the bytes of a card. Only plain UTF-8 is read (a UTF-16 or UTF-32 card, or one that starts with a
+    byte-order mark, is damaged), a long integer is not converted, and a key given twice is damaged too."""
+    damaged = AnchorCardProblem("it is damaged (it cannot be read as a card)")
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raise damaged
+    try:
+        return json.loads(raw.decode("utf-8"), parse_int=bounded_int, object_pairs_hook=no_repeated_keys)
+    except Exception:                  # a bad byte, bad JSON, too deep: damaged, and no other exception may escape
+        raise damaged
+
+
+def anchor_member_problem(number: int, item: Any) -> Optional[str]:
+    """Why picture `number` (1 to 3) of a card is not usable, or None. The first problem found, in a fixed order."""
+    if not isinstance(item, dict):
+        return "it is not an object"
+    for key in item:
+        if key not in ANCHOR_MEMBER_KEYS:
+            return "it has a part desk-art does not know (%s)" % anchor_key_text(key)
+    for key in ("file", "role", "sha256"):
+        if key not in item:
+            return "it has no %s" % key
+    named = ANCHOR_FILE_RE.fullmatch(item["file"]) if isinstance(item["file"], str) else None
+    if named is None:
+        return "file must look like 01_identity.png"
+    if int(item["file"][1]) != number:
+        return "the number in file must be its place in the list"
+    if item["role"] != named.group(1):
+        return "the role must be the word in file"
+    if not isinstance(item["sha256"], str) or ANCHOR_SHA_RE.fullmatch(item["sha256"]) is None:
+        return "the fingerprint must be 64 characters: digits and the letters a to f"
+    if "size" in item:
+        size = item["size"]
+        if not (isinstance(size, list) and len(size) == 2 and all(type(side) is int and 1 <= side <= 20000
+                                                                  for side in size)):
+            return "size must be two whole numbers from 1 to 20000"
+    if "source" in item:
+        source = item["source"]
+        if not (isinstance(source, dict) and sorted(source) == ["path", "sha256"]
+                and isinstance(source["path"], str) and 1 <= len(source["path"]) <= 1024
+                and not any(ord(char) < 32 or ord(char) == 127 for char in source["path"])
+                and isinstance(source["sha256"], str) and ANCHOR_SHA_RE.fullmatch(source["sha256"]) is not None):
+            return "source must be a path and a fingerprint"
+    if "prep" in item and not anchor_plain_text(item["prep"], 0, 200):
+        return "prep must be plain ASCII text of at most 200 characters"
+    if "provenance" in item and (not isinstance(item["provenance"], str)
+                                 or item["provenance"] not in ANCHOR_PROVENANCE):
+        return "provenance must be one of owner, supplied, generated"
+    return None
+
+
+def parse_anchor_card(raw: bytes, name: str) -> Dict[str, Any]:
+    """Every rule of the card applied to the bytes of the card of the set `name`. It returns the parsed card, or
+    raises AnchorCardProblem with one of the closed reasons and nothing else, whatever the bytes are. It touches
+    no file. The checks run in a fixed order, so the same bad card always gives the same reason."""
+    if len(raw) > ANCHOR_CARD_MAX_BYTES:
+        raise AnchorCardProblem("it is bigger than 64 KB")
+    card = anchor_card_json(raw)
+    if not isinstance(card, dict):
+        raise AnchorCardProblem("it is not a JSON object")
+    for key in card:
+        if key not in ANCHOR_CARD_KEYS:
+            raise AnchorCardProblem("it has a part desk-art does not know (%s)" % anchor_key_text(key))
+    for key in ("format", "name", "made", "keep", "members"):
+        if key not in card:
+            raise AnchorCardProblem("it has no %s" % key)
+    if type(card["format"]) is not int or card["format"] != ANCHOR_FORMAT:
+        raise AnchorCardProblem("format must be 1")
+    if card["name"] != name:
+        raise AnchorCardProblem("name must be the folder name")
+    if not isinstance(card["made"], str) or ANCHOR_MADE_RE.fullmatch(card["made"]) is None:
+        raise AnchorCardProblem("made must look like 2026-11-09T14:02:11Z")
+    if not anchor_plain_text(card["keep"], 0, ANCHOR_KEEP_MAX):
+        raise AnchorCardProblem("keep must be plain ASCII text of at most 300 characters on one line")
+    if "note" in card and not anchor_plain_text(card["note"], 3, ANCHOR_NOTE_MAX):
+        raise AnchorCardProblem("note must be plain ASCII text of 3 to 200 characters on one line")
+    if "owner_said" in card and not anchor_plain_text(card["owner_said"], 3, 200):
+        raise AnchorCardProblem("owner_said must be plain ASCII text of 3 to 200 characters on one line")
+    for text in (card["keep"], card.get("note", "")):
+        word = anchor_scope_word(text)
+        if word:
+            raise AnchorCardProblem('keep or note mentions "%s", which the scope rule keeps out of anchor sets' % word)
+    members = card["members"]
+    if not isinstance(members, list) or not 1 <= len(members) <= ANCHOR_MAX_MEMBERS:
+        raise AnchorCardProblem("members must be a list of 1 to 3 pictures")
+    for number, item in enumerate(members, start=1):
+        problem = anchor_member_problem(number, item)
+        if problem:
+            raise AnchorCardProblem("picture %d: %s" % (number, problem))
+    counts = collections.Counter(item["role"] for item in members)
+    if any(counts[role] > limit for role, limit in ANCHOR_ROLE_LIMITS.items()):
+        raise AnchorCardProblem("a set holds at most 1 identity, 2 style, 1 place, 1 room and 1 light pictures")
+    if (counts["room"] or counts["light"]) and not counts["place"]:
+        raise AnchorCardProblem("a room or light picture needs a place picture in the set")
+    if counts["room"] and counts["light"]:
+        raise AnchorCardProblem("a set cannot hold both a room picture and a light picture")
+    return card
+
+
+def saved_anchor_names(inbox: str) -> List[str]:
+    """Sorted names of the finished-looking sets in <inbox>/anchors: a folder (not a link) with a plain file
+    anchor.json in it (not read). At most ANCHOR_LIST_MAX names; none when the folder is missing or is a link."""
+    root = anchors_root(inbox)
+    try:
+        if os.path.islink(root) or not os.path.isdir(root):
+            return []
+        entries = sorted(os.listdir(root))
+    except OSError:
+        return []
+    names = []  # type: List[str]
+    for entry in entries:
+        if len(names) >= ANCHOR_LIST_MAX:
+            break
+        if not LABEL_RE.fullmatch(entry):
+            continue
+        try:
+            folder = os.lstat(os.path.join(root, entry))
+            card = os.lstat(os.path.join(root, entry, ANCHOR_CARD_NAME))
+        except OSError:
+            continue
+        if stat.S_ISDIR(folder.st_mode) and stat.S_ISREG(card.st_mode):
+            names.append(entry)
+    return names
+
+
+def anchor_not_found(inbox: str, name: str) -> Failure:
+    """The refusal for a set that is not saved, with the names that are."""
+    names = saved_anchor_names(inbox)
+    if names:
+        more = " and %d more" % (len(names) - ANCHOR_HINT_NAMES) if len(names) > ANCHOR_HINT_NAMES else ""
+        hint = "Saved sets: %s%s." % (", ".join(names[:ANCHOR_HINT_NAMES]), more)
+    else:
+        hint = ANCHOR_NO_SETS_HINT
+    return Failure("bad-input", "anchor set %s was not found in %s. Nothing was sent." % (name, anchors_root(inbox)),
+                   hint=hint)
+
+
+def anchor_picture_missing(name: str, number: int, role: str) -> Failure:
+    """The refusal for a picture of a set that is gone, is not a plain file, or is no longer a picture."""
+    return Failure("bad-input", "anchor set %s: picture %d (%s) is missing or is not a plain picture file. "
+                                "Nothing was sent." % (name, number, role), hint=ANCHOR_REPAIR_HINT)
+
+
+def load_anchor(inbox: str, name: str) -> AnchorSet:
+    """The set `name` of this inbox, checked for everything except its pictures' fingerprints (those are compared
+    on the copies that are sent, see confirm_anchor). A link is never followed, and every refusal happens before
+    anything is sent."""
+    check_anchor_name(name)
+    root = anchors_root(inbox)
+    if os.path.lexists(root) and os.path.realpath(root) != root:
+        raise Failure("inbox-unsafe", "the anchors folder %s is a link that leads elsewhere, so it was not used. "
+                                      "Nothing was sent." % root, hint=ANCHOR_LINK_HINT)
+    if not os.path.isdir(root):
+        raise anchor_not_found(inbox, name)
+    folder = os.path.join(root, name)
+    if not os.path.isdir(folder):
+        raise anchor_not_found(inbox, name)
+    if os.path.realpath(folder) != folder:
+        raise Failure("inbox-unsafe", "anchor set %s is a link that leads elsewhere, so it was not used. "
+                                      "Nothing was sent." % name, hint=ANCHOR_LINK_HINT)
+    card_path = os.path.join(folder, ANCHOR_CARD_NAME)
+    missing = Failure("bad-input", "anchor set %s has no anchor.json, so it is not a finished set. Nothing was sent."
+                      % name, hint=ANCHOR_SAVE_AGAIN_HINT)
+    try:
+        info = os.lstat(card_path)
+    except OSError:
+        raise missing
+    if stat.S_ISLNK(info.st_mode):
+        raise Failure("inbox-unsafe", "anchor set %s: anchor.json is a link, so it was not used. Nothing was sent."
+                      % name, hint=ANCHOR_LINK_HINT)
+    if not stat.S_ISREG(info.st_mode):
+        raise missing
+    try:
+        with open_regular(card_path) as handle:
+            raw = handle.read(ANCHOR_CARD_MAX_BYTES + 1)
+    except OSError:
+        raise missing
+    try:
+        card = parse_anchor_card(raw, name)
+    except AnchorCardProblem as problem:
+        raise Failure("bad-input", "anchor set %s: anchor.json is not usable: %s. Nothing was sent."
+                      % (name, problem.reason), hint=ANCHOR_REPAIR_HINT)
+    members = []  # type: List[AnchorMember]
+    for number, item in enumerate(card["members"], start=1):
+        path = os.path.join(folder, item["file"])
+        try:
+            info = os.lstat(path)
+            plain = stat.S_ISREG(info.st_mode) and info.st_size <= MAX_REF_BYTES
+        except OSError:
+            plain = False
+        if not plain:
+            raise anchor_picture_missing(name, number, item["role"])
+        members.append(AnchorMember(number, item["role"], item["file"], path, item["sha256"],
+                                    tuple(item["size"]) if "size" in item else None))
+    return AnchorSet(name, folder, card["keep"], card.get("note"), card["made"], card.get("owner_said"), members,
+                     hashlib.sha256(raw).hexdigest())
+
+
+def anchor_ref_paths(anchor: AnchorSet) -> List[str]:
+    """The set's pictures as paths for check_refs, in saved order."""
+    return [member.path for member in anchor.members]
+
+
+def name_anchor_refs(anchor: AnchorSet, refs: List[Ref]) -> List[Ref]:
+    """The checked references of a call with a set: the first ones are the set's pictures and are named
+    <set>/<file> (so "References sent" and the manifest say which picture of which set), the extras keep their names."""
+    return [ref._replace(name="%s/%s" % (anchor.name, anchor.members[index].file)) if index < len(anchor.members)
+            else ref for index, ref in enumerate(refs)]
+
+
+def anchor_too_many(anchor: AnchorSet, given: int) -> Failure:
+    """The refusal for a set plus more extra pictures than the call limit allows."""
+    count = len(anchor.members)
+    return Failure("bad-input", "anchor set %s holds %d picture%s, so you can add at most %d more reference pictures "
+                                "(you gave %d). Nothing was sent."
+                   % (anchor.name, count, "" if count == 1 else "s", MAX_REFS - count, given))
+
+
+def anchor_picture_usable(path: str) -> bool:
+    """True when the file still opens as a plain file, starts like a PNG, JPEG or WEBP picture, and its size can be
+    read from its first bytes (a picture the set builder wrote always can). Nothing is hashed and no program runs."""
+    try:
+        with open_regular(path) as handle:
+            fmt = detect_format(handle.read(16))
+            return fmt is not None and SIZE_READERS[fmt](handle) is not None
+    except OSError:
+        return False
+
+
+def check_anchor_pictures(anchor: AnchorSet) -> None:
+    """Before check_refs: a picture of the set that was emptied, locked, cut short or replaced by something that is
+    not a picture is refused here, in the set's own words (check_refs would refuse it too, but with a long path and
+    no word about the set). load_anchor leaves the insides of the pictures alone, because the skill's commands that
+    only show or measure a set load it too and report such a picture themselves, so this check runs only on the way
+    to a generator. A picture that is still a picture, but another one, is caught later by confirm_anchor."""
+    for member in anchor.members:
+        if not anchor_picture_usable(member.path):
+            raise anchor_picture_missing(anchor.name, member.pos, member.role)
+
+
+def confirm_anchor(job: Job, anchor: AnchorSet, staged: List[Staged]) -> None:
+    """Right after stage_refs: the copies that are about to be sent must be the pictures that were saved. They are
+    compared by the fingerprint of the bytes that were read and written, so a picture changed or swapped after the
+    set was saved is refused here, before any generator starts. The job folder is dropped first."""
+    for member, copy in zip(anchor.members, staged):
+        if copy.sha256 != member.sha256:
+            drop_job(job)
+            raise Failure("bad-input", "anchor set %s: picture %d (%s) is not the picture that was saved (saved %s, "
+                                       "found %s). The set was changed after it was saved. Nothing was sent."
+                          % (anchor.name, member.pos, member.role, member.sha256[:8], copy.sha256[:8]),
+                          hint=ANCHOR_CHANGED_HINT)
+
+
+def anchor_block(anchor: AnchorSet, extra: int = 0) -> str:
+    """The fixed words that say what each picture is for. Built from the roles, the keep line and the number of
+    extra pictures only: never the set's name, a file name, a note or a source. ASCII, no trailing newline."""
+    places = [member.pos for member in anchor.members if member.role == "place"]
+    lines = [ANCHOR_INTRO]
+    for member in anchor.members:
+        text = ANCHOR_ROLE_TEXT[member.role]
+        if places:
+            text = text.replace("{place}", str(places[0]))
+        lines.append("Picture %d (%s): %s" % (member.pos, member.role, text))
+    keep = anchor.keep.strip().rstrip(".").strip()
+    if keep:
+        lines.append("Keep exactly: %s." % keep)
+    count = len(anchor.members)
+    if extra == 1:
+        lines.append("Picture %d is extra: the request below says how to use it." % (count + 1))
+    elif extra == 2:
+        lines.append("Pictures %d and %d are extra: the request below says how to use them." % (count + 1, count + 2))
+    elif extra >= 3:
+        lines.append("Pictures %d to %d are extra: the request below says how to use them."
+                     % (count + 1, count + extra))
+    return "\n".join(lines)
+
+
+def anchor_request(anchor: AnchorSet, extra: int, prompt: str) -> str:
+    """What follows the generator's wrapper: the block, then NOW MAKE, then the caller's prompt, unchanged."""
+    return anchor_block(anchor, extra) + ANCHOR_NOW_MAKE + prompt
+
+
+def anchor_answer(anchor: AnchorSet, extra: int) -> Dict[str, Any]:
+    """The "anchor" part of an answer: which set was sent, in what order, and the fingerprints of its words and card."""
+    return {"name": anchor.name, "wordsVersion": ANCHOR_WORDS_VERSION,
+            "wordsSha256": sha256_text(anchor_block(anchor, extra)),
+            "cardSha256": anchor.card_sha256,
+            "pictures": [{"n": member.pos, "role": member.role, "name": "%s/%s" % (anchor.name, member.file),
+                          "sha8": member.sha256[:8]} for member in anchor.members],
+            "extra": extra}
+
+
+def anchor_manifest(anchor: AnchorSet, extra: int) -> Dict[str, Any]:
+    """The "anchor" key of a manifest row: enough to recompute the words and to tell which card was in force."""
+    return {"name": anchor.name, "wordsVersion": ANCHOR_WORDS_VERSION,
+            "wordsSha256": sha256_text(anchor_block(anchor, extra)),
+            "cardSha256": anchor.card_sha256,
+            "roles": [member.role for member in anchor.members], "extra": extra}
+
+
+def agy_reference_lines(staged: List[Staged], anchor: Optional[AnchorSet]) -> List[str]:
+    """The REFERENCES lines of an agy prompt. With a set each line also says which picture it is and what it is for."""
+    lines = []  # type: List[str]
+    for index, item in enumerate(staged):
+        if anchor is None:
+            lines.append("./refs/" + os.path.basename(item.path))
+        else:
+            role = anchor.members[index].role if index < len(anchor.members) else "extra"
+            lines.append("./refs/%s (picture %d, %s)" % (os.path.basename(item.path), index + 1, role))
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -1345,9 +1809,19 @@ def codex_problem(result: ProcResult, events: Dict[str, Any], timeout: float, ro
 
 def cmd_codex(args: argparse.Namespace) -> Dict[str, Any]:
     label = check_label(args.label)
+    anchor_name = check_anchor_name(args.anchor) if args.anchor is not None else None
     prompt = read_prompt(args, required=True)
     inbox = prepare_inbox(args.inbox)
-    refs = check_refs(args.ref or [], ref_sources(args.ref_root, inbox))
+    anchor = load_anchor(inbox, anchor_name) if anchor_name is not None else None
+    extras = list(args.ref or [])
+    if anchor is not None:
+        if len(anchor.members) + len(extras) > MAX_REFS:
+            raise anchor_too_many(anchor, len(extras))
+        check_anchor_pictures(anchor)
+    refs = check_refs((anchor_ref_paths(anchor) if anchor is not None else []) + extras,
+                      ref_sources(args.ref_root, inbox))
+    if anchor is not None:
+        refs = name_anchor_refs(anchor, refs)
     timeout = check_number(args.timeout, "--timeout", MIN_TIMEOUT, MAX_TIMEOUT, DEFAULT_TIMEOUT)
     began = time.time()
     codex = find_codex()
@@ -1361,6 +1835,8 @@ def cmd_codex(args: argparse.Namespace) -> Dict[str, Any]:
     job = make_job()
     try:
         staged = stage_refs(job, refs)
+        if anchor is not None:
+            confirm_anchor(job, anchor, staged)
         if any("," in item.path for item in staged):           # Codex reads a comma in an -i value as two paths
             drop_job(job)
             raise Failure("bad-input", "the folder desk-art works in has a comma in its path, and Codex would read "
@@ -1370,14 +1846,17 @@ def cmd_codex(args: argparse.Namespace) -> Dict[str, Any]:
         before = list_image_files(root, 3)
         start = time.time()
         log("running codex exec (job %s)" % job.job_id)
+        request = anchor_request(anchor, len(extras), prompt) if anchor is not None else prompt
         result = run_process(
             build_codex_argv(codex, job.work, [ref.path for ref in staged]), max(1.0, timeout - (start - began)),
-            cwd=job.work, stdin_bytes=(CODEX_WRAPPER + prompt).encode("utf-8"), env=child_env())
+            cwd=job.work, stdin_bytes=(CODEX_WRAPPER + request).encode("utf-8"), env=child_env())
         events = parse_codex_events(result.stdout)
         elapsed = round(time.time() - start, 1)
         thread_id = events["thread_id"]
         kept = {"jobId": job.job_id, "jobDir": job.dir, "threadId": thread_id,
-                "refsSent": [] if result.error else refs_sent(staged)}
+                "refsSent": [] if result.error else refs_sent(staged)}  # type: Dict[str, Any]
+        if anchor is not None and not result.error:
+            kept["anchor"] = anchor_answer(anchor, len(extras))
         problem = codex_problem(result, events, timeout, root, kept)
         if problem:
             raise problem
@@ -1390,11 +1869,16 @@ def cmd_codex(args: argparse.Namespace) -> Dict[str, Any]:
             raise Failure(
                 "codex-no-images", "codex finished but made no picture" + reported,
                 finalMessage=events["message"], **kept)
-        provenance = {"threadId": thread_id, "prompt": prompt, "refs": staged}
+        provenance = {"threadId": thread_id, "prompt": prompt, "refs": staged}  # type: Dict[str, Any]
+        if anchor is not None:
+            provenance["anchor"] = anchor_manifest(anchor, len(extras))
         images, skipped = file_images(inbox, pictures, "codex", label, job.job_id, provenance)
         answer = {"ok": True, "backend": "codex", "jobId": job.job_id, "threadId": thread_id,
                   "finalMessage": events["message"], "elapsedSec": elapsed, "images": images,
-                  "usage": events["usage"], "refsSent": refs_sent(staged), "matchedBy": matched_by}
+                  "usage": events["usage"], "refsSent": refs_sent(staged),
+                  "matchedBy": matched_by}  # type: Dict[str, Any]
+        if anchor is not None:
+            answer["anchor"] = anchor_answer(anchor, len(extras))
         answer.update(skipped_fields(skipped, job, os.path.join(root, thread_id) if thread_id else None))
         if not skipped:
             drop_job(job)
@@ -1519,10 +2003,20 @@ def agy_problem(result: ProcResult, status: Optional[str], message: Optional[str
 
 def cmd_agy(args: argparse.Namespace) -> Dict[str, Any]:
     label = check_label(args.label)
+    anchor_name = check_anchor_name(args.anchor) if args.anchor is not None else None
     prompt = read_prompt(args, required=True)
     inbox = prepare_inbox(args.inbox)
     model = check_model(args.model)
-    refs = check_refs(args.ref or [], ref_sources(args.ref_root, inbox))
+    anchor = load_anchor(inbox, anchor_name) if anchor_name is not None else None
+    extras = list(args.ref or [])
+    if anchor is not None:
+        if len(anchor.members) + len(extras) > MAX_REFS:
+            raise anchor_too_many(anchor, len(extras))
+        check_anchor_pictures(anchor)
+    refs = check_refs((anchor_ref_paths(anchor) if anchor is not None else []) + extras,
+                      ref_sources(args.ref_root, inbox))
+    if anchor is not None:
+        refs = name_anchor_refs(anchor, refs)
     timeout = check_number(args.timeout, "--timeout", MIN_TIMEOUT, MAX_TIMEOUT, DEFAULT_TIMEOUT)
     agy = find_agy()
     if not agy:
@@ -1536,11 +2030,14 @@ def cmd_agy(args: argparse.Namespace) -> Dict[str, Any]:
     job = make_job()
     try:
         staged = stage_refs(job, refs)
+        if anchor is not None:
+            confirm_anchor(job, anchor, staged)
         os.makedirs(os.path.join(job.work, "out"), exist_ok=True)
         before = snapshot(agy_roots(job.work))
-        full_prompt = AGY_WRAPPER + prompt
+        body = anchor_request(anchor, len(extras), prompt) if anchor is not None else prompt
+        full_prompt = AGY_WRAPPER + body
         if staged:
-            full_prompt += "\n\nREFERENCES:\n" + "\n".join("./refs/" + os.path.basename(ref.path) for ref in staged)
+            full_prompt += "\n\nREFERENCES:\n" + "\n".join(agy_reference_lines(staged, anchor))
         start = time.time()
         log("running agy (job %s)" % job.job_id)
         result = run_process(build_agy_argv(agy, model, full_prompt), timeout, cwd=job.work, env=child_env())
@@ -1552,7 +2049,9 @@ def cmd_agy(args: argparse.Namespace) -> Dict[str, Any]:
         message = reply.strip() if isinstance(reply, str) else (json.dumps(reply) if reply else None)
         message = message[:MAX_MESSAGE_CHARS] if message else message
         kept = {"jobId": job.job_id, "jobDir": job.dir, "conversationId": conversation,
-                "refsSent": [] if result.error else refs_sent(staged)}
+                "refsSent": [] if result.error else refs_sent(staged)}  # type: Dict[str, Any]
+        if anchor is not None and not result.error:
+            kept["anchor"] = anchor_answer(anchor, len(extras))
         problem = agy_problem(result, status, message, timeout, kept)
         if problem:
             raise problem
@@ -1564,11 +2063,17 @@ def cmd_agy(args: argparse.Namespace) -> Dict[str, Any]:
                 "agy-no-images", "agy finished but no picture file was found %s%s"
                 % (searched, " (agy said on stderr: %s)" % notice if notice else ""),
                 finalMessage=message, **kept)
-        provenance = {"conversationId": conversation, "model": model, "prompt": prompt, "refs": staged}
+        provenance = {"conversationId": conversation, "model": model, "prompt": prompt,
+                      "refs": staged}  # type: Dict[str, Any]
+        if anchor is not None:
+            provenance["anchor"] = anchor_manifest(anchor, len(extras))
         images, skipped = file_images(inbox, pictures, "agy", label, job.job_id, provenance)
         answer = {"ok": True, "backend": "agy", "jobId": job.job_id, "conversationId": conversation,
                   "agentStatus": status, "finalMessage": message, "elapsedSec": elapsed, "images": images,
-                  "refsSent": refs_sent(staged), "matchedBy": agy_matched_by(conversation, pictures)}
+                  "refsSent": refs_sent(staged),
+                  "matchedBy": agy_matched_by(conversation, pictures)}  # type: Dict[str, Any]
+        if anchor is not None:
+            answer["anchor"] = anchor_answer(anchor, len(extras))
         answer.update(skipped_fields(skipped, job))
         if not skipped:
             drop_job(job)
@@ -1792,7 +2297,8 @@ def cmd_clip_image(args: argparse.Namespace) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def count_inbox_images(inbox: str) -> int:
-    return len(list_image_files(inbox, 3))
+    saved = anchors_root(inbox) + os.sep                 # the stored pictures of anchor sets are not "pictures filed"
+    return len([path for path in list_image_files(inbox, 3) if not path.startswith(saved)])
 
 
 def inbox_status(raw: Optional[str], notes: List[str]) -> Dict[str, Any]:
@@ -1944,6 +2450,9 @@ def build_parser() -> argparse.ArgumentParser:
     codex.add_argument("--label", required=True, metavar="L",
                        help="short name for the files: a-z 0-9 _ -, 1 to 40 characters")
     add_prompt_source(codex, True)
+    codex.add_argument("--anchor", metavar="NAME",
+                       help="a saved anchor set in <inbox>/anchors/NAME: its pictures are sent first, in saved order, "
+                            "with fixed words that say what each one is for; --ref pictures follow (6 pictures in all)")
     codex.add_argument("--ref", action="append", metavar="PATH",
                        help="reference picture (repeat up to 6 times; PNG, JPEG or WEBP, at most 20 MB)")
     add_ref_root(codex)
@@ -1955,6 +2464,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="short name for the files: a-z 0-9 _ -, 1 to 40 characters")
     add_prompt_source(agy, True)
     agy.add_argument("--model", metavar="SLUG", help="model slug as listed by `agy models`")
+    agy.add_argument("--anchor", metavar="NAME",
+                     help="a saved anchor set in <inbox>/anchors/NAME: its pictures are sent first, in saved order, "
+                          "with fixed words that say what each one is for; --ref pictures follow (6 pictures in all)")
     agy.add_argument("--ref", action="append", metavar="PATH",
                      help="reference picture (repeat up to 6 times; PNG, JPEG or WEBP, at most 20 MB)")
     add_ref_root(agy)
@@ -1998,7 +2510,7 @@ COMMANDS = {"status": cmd_status, "codex": cmd_codex, "agy": cmd_agy, "ingest": 
 
 VALUE_FLAGS = frozenset([
     "--inbox", "--label", "--prompt-file", "--ref", "--ref-root", "--timeout", "--model", "--backend",
-    "--file", "--note", "--dir", "--since", "--min-count", "--settle", "--ext"])
+    "--file", "--note", "--dir", "--since", "--min-count", "--settle", "--ext", "--anchor"])
 SWITCH_FLAGS = frozenset(["--prompt-stdin", "--help", "-h"])
 
 

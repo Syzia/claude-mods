@@ -156,6 +156,20 @@ const REFS_SCHEMA = {
     'Absolute paths of reference pictures to attach, usually the existing sprite (at most 6; png, jpeg or webp, 20 MB or less each). ' +
     `${UPLOAD_WARNING} ${REF_FOLDERS_RULE} They are never changed.`,
 }
+
+/** One sentence in both generator descriptions. */
+export const ANCHOR_SENTENCE =
+  'Anchor sets are optional and not yet proven, and a one-off edit needs none (pass the picture in `refs`). When the owner asks to keep a character, a style, a place or an hour the same across several pictures, or a plain `refs` run drifted, offer the desk-art:anchor skill, wait for a yes, save a set, and pass its name as `anchor`: ' +
+  'its pictures go first, in their saved order, with fixed words that say what each one is for, and `refs` can add extra pictures after them (6 pictures in all).'
+
+const ANCHOR_SCHEMA = {
+  type: 'string',
+  pattern: LABEL_SOURCE,
+  description:
+    'Optional: the name of a saved anchor set, for example "nanami-final-v1" (the desk-art:anchor skill saves sets in the art inbox). ' +
+    'Its pictures are sent first, in their saved order, with fixed words that say what each one is for; `refs` then adds extra pictures after them, at most 6 pictures in all. ' +
+    `${UPLOAD_WARNING} A name that is not saved, or a saved picture that has changed, is refused before anything is sent.`,
+}
 const RUN_TIMEOUT_SCHEMA = {
   type: 'number',
   minimum: RUN_SEC_MIN,
@@ -189,6 +203,7 @@ export const TOOL_SPECS: readonly ToolSpec[] = [
       "Make character art with Codex's built-in image tool, already signed in on this Mac (headless, no API key), and file the pictures into the art inbox. " +
       'The four test runs took 23 to 42 seconds; a run is stopped after 8 minutes unless `timeoutSec` says otherwise. `prompt` is the whole request; `label` is a short lowercase name for the file names. ' +
       'To keep a character the same, pass the existing sprite in `refs` and ask for ONE change per run. ' +
+      `${ANCHOR_SENTENCE} ` +
       `${UPLOAD_WARNING} ${REF_FOLDERS_RULE} ` +
       'Returns the full path of every filed picture: open each with the Read tool and look at it before you say anything about it. ' +
       SCOPE,
@@ -198,6 +213,7 @@ export const TOOL_SPECS: readonly ToolSpec[] = [
         prompt: PROMPT_SCHEMA,
         label: LABEL_SCHEMA,
         refs: REFS_SCHEMA,
+        anchor: ANCHOR_SCHEMA,
         timeoutSec: RUN_TIMEOUT_SCHEMA,
       },
       required: ['prompt', 'label'],
@@ -211,6 +227,7 @@ export const TOOL_SPECS: readonly ToolSpec[] = [
       "Make character art with Google's Antigravity CLI (agy -p, the owner's Google sign-in, no API key) and file the pictures into the art inbox. " +
       'Tested on this Mac on 5 Nov 2026 with agy 1.5.0: it made flat test pictures, also from a reference picture. agy may not be installed (call status first). ' +
       'Same arguments as codex_image, plus an optional `model` slug. The two test runs took roughly 40 to 100 seconds; a run is stopped after 8 minutes unless `timeoutSec` says otherwise. ' +
+      `${ANCHOR_SENTENCE} ` +
       `${UPLOAD_WARNING} ${REF_FOLDERS_RULE} ` +
       'Returns the full path of every filed picture: open each with the Read tool and look at it before you say anything about it. ' +
       SCOPE,
@@ -225,6 +242,7 @@ export const TOOL_SPECS: readonly ToolSpec[] = [
           description: 'Optional agy model slug (agy models lists them): letters, digits and . _ : - only, up to 64, not starting with "-".',
         },
         refs: REFS_SCHEMA,
+        anchor: ANCHOR_SCHEMA,
         timeoutSec: RUN_TIMEOUT_SCHEMA,
       },
       required: ['prompt', 'label'],
@@ -404,6 +422,8 @@ export const HELP_TEXT = [
   '  ingest       file pictures that already exist, for example a Gemini app result',
   '  wait_new     wait for a new picture file in a folder (Downloads by default)',
   '  clip_image   file the picture that is on the clipboard',
+  '',
+  'Anchor sets help keep pictures the same (not yet proven): Claude saves one to three reference pictures once (the desk-art:anchor skill) and sends the same pictures, in the same order, with the same words, every time you ask for a picture of that thing. Every picture in a set is sent to OpenAI (Codex) or Google (Antigravity) each time the set is used. Sets are optional: a quick single edit with one reference picture needs none.',
   '',
   `Reference pictures you give Claude are uploaded to OpenAI (Codex) or Google (Antigravity). Only pictures in the allowed folders can be sent: see the "${REF_FOLDERS_TITLE}" setting.`,
   '',
@@ -695,6 +715,13 @@ function checkModel(value: unknown): Checked<string | undefined> {
   return bad("model must be 1 to 64 characters from A-Z a-z 0-9 . _ : - (and must not start with '-')")
 }
 
+/** The name of a saved anchor set. The wording after "anchor must be" is the helper's own (its text H1), so both layers agree. */
+function checkAnchor(value: unknown): Checked<string | undefined> {
+  if (value === undefined || value === null) return good(undefined)
+  if (typeof value === 'string' && LABEL_RE.test(value)) return good(value)
+  return bad("anchor must be the name of a saved anchor set: 1 to 40 characters, lower-case letters, digits, '_' or '-', starting with a letter or a digit")
+}
+
 function checkPaths(key: 'refs' | 'files', value: unknown, min: number, max: number): Checked<string[]> {
   if (value === undefined || value === null) {
     return min > 0 ? bad(`give between ${min} and ${max} files`) : good([])
@@ -797,12 +824,15 @@ function buildFlags(tool: ToolName, args: Args, refRoots: readonly string[]): Ch
       if (!prompt.ok) return prompt
       const refs = checkPaths('refs', args.refs, 0, REFS_MAX)
       if (!refs.ok) return refs
+      const anchor = checkAnchor(args.anchor)
+      if (!anchor.ok) return anchor
       const timeout = checkNumber('timeoutSec', args.timeoutSec, RUN_SEC_MIN, RUN_SEC_MAX)
       if (!timeout.ok) return timeout
       return good({
         flags: [
           ...valueFlag('--label', label.value),
           '--prompt-stdin',
+          ...optionalFlag('--anchor', anchor.value),
           ...refs.value.flatMap((path) => ['--ref', path]),
           ...refRootFlags(refRoots),
           ...optionalFlag('--timeout', timeout.value),
@@ -820,6 +850,8 @@ function buildFlags(tool: ToolName, args: Args, refRoots: readonly string[]): Ch
       if (!model.ok) return model
       const refs = checkPaths('refs', args.refs, 0, REFS_MAX)
       if (!refs.ok) return refs
+      const anchor = checkAnchor(args.anchor)
+      if (!anchor.ok) return anchor
       const timeout = checkNumber('timeoutSec', args.timeoutSec, RUN_SEC_MIN, RUN_SEC_MAX)
       if (!timeout.ok) return timeout
       return good({
@@ -827,6 +859,7 @@ function buildFlags(tool: ToolName, args: Args, refRoots: readonly string[]): Ch
           ...valueFlag('--label', label.value),
           '--prompt-stdin',
           ...optionalFlag('--model', model.value),
+          ...optionalFlag('--anchor', anchor.value),
           ...refs.value.flatMap((path) => ['--ref', path]),
           ...refRootFlags(refRoots),
           ...optionalFlag('--timeout', timeout.value),
@@ -1025,6 +1058,36 @@ function refsSentLine(tool: ToolName, json: Rec): string | undefined {
   return names.length === 0 ? undefined : `References sent to ${to}: ${names.join(', ')}`
 }
 
+/**
+ * `Anchor set <name> sent to OpenAI: picture 1 identity (9f2c0a1b), picture 2 place (41aa07c3); 1 extra picture after
+ * the set. Words version 1.` from the helper's `anchor` object, for a codex or agy run that was made with a saved set.
+ * Nothing for any other run, and nothing for an object without a name. Every word comes from the helper's answer,
+ * so each one goes through plain(); an odd or missing object never throws.
+ */
+function anchorLine(tool: ToolName, json: Rec): string | undefined {
+  const to = UPLOADS_TO[tool]
+  if (to === undefined) return undefined
+  const anchor = rec(json.anchor)
+  const name = plain(strOf(anchor.name) ?? '', 60)
+  if (name === '') return undefined
+  const items = listOf(anchor.pictures)
+    .filter(isRecord)
+    .map((picture) => {
+      const n = numOf(picture.n)
+      const role = strOf(picture.role)
+      if (n === undefined || role === undefined) return undefined
+      const sha = strOf(picture.sha8)
+      return `picture ${n} ${plain(role, 20)}${sha === undefined ? '' : ` (${plain(sha, 16)})`}`
+    })
+    .filter((one): one is string => one !== undefined)
+  const extra = numOf(anchor.extra)
+  const extraPart =
+    extra !== undefined && Number.isInteger(extra) && extra > 0 ? `; ${plural(extra, 'extra picture')} after the set` : ''
+  const version = strOf(anchor.wordsVersion)
+  const versionPart = version === undefined ? '' : ` Words version ${plain(version, 16)}.`
+  return `Anchor set ${name} sent to ${to}${items.length > 0 ? `: ${items.join(', ')}` : ''}${extraPart}.${versionPart}`
+}
+
 /** How many pictures one call left unfiled (the helper's `skipped` is a count). */
 function skippedCount(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value))
@@ -1071,6 +1134,8 @@ function filedResult(tool: ToolName, json: Rec): Outcome {
   if (strOf(json.matchedBy) === 'folder-diff') text.push(FOLDER_DIFF_TEXT)
   const sent = refsSentLine(tool, json)
   if (sent !== undefined) text.push(sent)
+  const anchored = anchorLine(tool, json)
+  if (anchored !== undefined) text.push(anchored)
   const maker = MAKER[tool]
   const said = strOf(json.finalMessage)
   if (maker !== undefined && said !== undefined && said.trim() !== '') {
@@ -1259,6 +1324,8 @@ function failed(tool: ToolName, json: Rec): Outcome {
   }
   const sent = refsSentLine(tool, json)
   if (sent !== undefined) text.push(sent)
+  const anchored = anchorLine(tool, json)
+  if (anchored !== undefined) text.push(anchored)
   // A run that failed after Codex had started: its thread folder, and the pictures already in it.
   const folder = strOf(json.threadFolder)
   if (folder !== undefined && folder.trim() !== '') text.push(`Thread folder: ${pathText(folder)}`)

@@ -2520,10 +2520,10 @@ class CommandLineTests(SandboxCase):
     def test_flags_listed_by_help(self):
         flags = {name: self.cli(name, "--help").data["flags"] for name in SUBCOMMANDS}
         self.assertEqual(flags["status"], ["--inbox", "--ref-root"])
-        self.assertEqual(flags["codex"], ["--inbox", "--label", "--prompt-file", "--prompt-stdin", "--ref",
+        self.assertEqual(flags["codex"], ["--inbox", "--label", "--prompt-file", "--prompt-stdin", "--anchor", "--ref",
                                           "--ref-root", "--timeout"])
-        self.assertEqual(flags["agy"], ["--inbox", "--label", "--prompt-file", "--prompt-stdin", "--model", "--ref",
-                                        "--ref-root", "--timeout"])
+        self.assertEqual(flags["agy"], ["--inbox", "--label", "--prompt-file", "--prompt-stdin", "--model", "--anchor",
+                                        "--ref", "--ref-root", "--timeout"])
         self.assertEqual(flags["ingest"], ["--inbox", "--label", "--backend", "--file", "--ref-root",
                                            "--prompt-file", "--prompt-stdin", "--note"])
         self.assertEqual(flags["wait-new"], ["--inbox", "--dir", "--since", "--timeout", "--min-count", "--settle", "--ext"])

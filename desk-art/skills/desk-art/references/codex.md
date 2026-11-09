@@ -102,6 +102,8 @@ The `-i` option can swallow text placed after it. So the helper does not put the
 
 The exact arrangement of `-i` and the prompt on Codex's input was checked with real runs on 4 Nov 2026, with no reference, one reference and two references, using `codex-cli 0.164.0-alpha.11.1`. With one reference (a flat green square with one white circle), the new picture came back with the same green background and a blue circle, as asked. With two references (a green square with a white circle, and a magenta square with a white triangle), the request asked for the first one's background colour and the second one's shape, and the picture came back green with a white triangle. The requests alone could not have made those results, so the references were attached and used.
 
+Anchored runs (0.2.0). When `anchor` is given, the helper reads the saved set and sends its pictures first. Codex's standard input is then the wrapper (its text is unchanged), then the anchor block (the fixed words about each picture; it starts "REQUEST says otherwise for the reference pictures"), then `NOW MAKE:` and the prompt. The set's pictures are `-i` copies in their saved order, then any extra pictures from `refs`. Codex is handed only the pictures, in that order, and no file names, so "Picture 2 (room)" relies on Codex matching "the second picture" to the second attachment. Whether the block stops a style picture's subject from being copied is not verified.
+
 ## Where files land
 
 1. Codex writes the picture in its own folder: `~/.codex/generated_images/<thread id>/exec-<uuid>.png`. This is Codex's doing. It happens with every run. (If you set the `CODEX_HOME` environment variable, Codex and the helper use that folder instead of `~/.codex`.)
