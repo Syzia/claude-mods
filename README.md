@@ -9,6 +9,7 @@ This folder holds the Claude Code mods you use. A mod is an add-on that changes 
 | `office-feed` | One small file per session that `agent-office` writes for the 3D office while you work |
 | `desk-art` | Makes game art with Codex, Antigravity and the Gemini app, with no API keys. It can also save anchor sets (a few reference pictures that Claude sends every time) that are meant to help pictures stay alike; this is not yet proven |
 | `screen-light` | A small light on the right edge of your screen that shows when Claude has control of your Mac, with Clawd the crab and a pause button that stops Claude from using your screen until you resume. Try it with `/screen-light demo` |
+| `crab-buddy` | A pixel crab that floats on your desktop and shows what your chats are doing: working, waiting on you, done or failed. Click him to open the chat, right-click for the chat list and his settings. `/crab` adds him to a chat and `/crab-away` takes him out |
 | `.claude-plugin` | The list that tells Claude Code which mods are here |
 
 ## The history: your backup of the mods
@@ -20,7 +21,7 @@ A private copy is on GitHub, in your account: https://github.com/Syzia/claude-mo
 Kept in the history and on GitHub: the code and sounds of every mod, `office-app/save.json` (your office's money, furniture and outfits), and these notes.
 Not kept: `office-feed` (the live snapshots hold task text and paths), `node_modules` (`npm install` brings it back) and the type files that Claude Code lays into a mod's folder itself.
 
-When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1`, `desk-art-v0.2.0` and `screen-light-v0.2.1`.
+When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1`, `desk-art-v0.2.0`, `screen-light-v0.2.1` and `crab-buddy-v0.4.0`.
 
 To look at it, type these in Terminal:
 1. The steps so far: `git -C ~/claude-mods log --oneline`
@@ -36,5 +37,5 @@ Tried on 6 Nov 2026 in a throwaway home folder: `agent-office` and `desk-art` in
 1. Install GitHub's `gh` program (https://cli.github.com), then sign in with `gh auth login` and `gh auth setup-git`.
 2. Download the mods. Keep this exact place and name, because `agent-office` writes into it: `git clone https://github.com/Syzia/claude-mods ~/claude-mods`
 3. Tell Claude Code where they are: `claude plugin marketplace add ~/claude-mods`
-4. Install each mod: `claude plugin install agent-office@hunter-mods --scope user`, `claude plugin install desk-art@hunter-mods --scope user` and `claude plugin install screen-light@hunter-mods --scope user`. It may say some settings are "not yet set". They are optional, and the defaults work.
+4. Install each mod: `claude plugin install agent-office@hunter-mods --scope user`, `claude plugin install desk-art@hunter-mods --scope user`, `claude plugin install screen-light@hunter-mods --scope user` and `claude plugin install crab-buddy@hunter-mods --scope user` (added 12 Nov 2026; not yet through that restore test). It may say some settings are "not yet set". They are optional, and the defaults work.
 5. Start a new Claude session. The screen light builds its small program by itself the first time (this needs the Mac's Command Line Tools: if a build fails, run `xcode-select --install` in Terminal, then type `/screen-light build` in Claude). For the 3D office, install Node.js (https://nodejs.org), then double-click `office-app/Open Office.command`. The first run installs its 3D library by itself.

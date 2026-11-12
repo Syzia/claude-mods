@@ -19,6 +19,11 @@
       "name": "screen-light",
       "source": "./screen-light",
       "description": "A small light on the right edge of the screen that shows when Claude has control of your Mac, full screen or inside one app"
+    },
+    {
+      "name": "crab-buddy",
+      "source": "./crab-buddy",
+      "description": "A little pixel crab that floats on your desktop, shows when Claude is working, and takes you to Claude when clicked"
     }
   ]
 }
