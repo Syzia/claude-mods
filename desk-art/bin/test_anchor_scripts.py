@@ -309,7 +309,7 @@ class BuildStoredTests(ScriptCase):
         self.assertEqual(answer["inbox"], self.sb.inbox)
         self.assertEqual(answer["dir"], folder)
         self.assertEqual(answer["keep"], KEEP)
-        self.assertEqual((answer["note"], answer["ownerSaid"], answer["wordsVersion"]), (None, None, "1"))
+        self.assertEqual((answer["note"], answer["ownerSaid"], answer["wordsVersion"]), (None, None, "2"))
         self.assertEqual((answer["uploads"], answer["next"]), (UPLOADS, NEXT))
         self.assertNotIn("ignoredRoots", answer)
         self.assertEqual(answer["pictures"], [{
@@ -1247,7 +1247,7 @@ class ReadOnlyCommandTests(ScriptCase):
         anchor = desk_art.load_anchor(self.sb.inbox, "closeup-v1")
         self.assertEqual(data["block"], desk_art.anchor_block(anchor, 0))
         self.assertEqual((data["uploads"], data["wordsVersion"], data["note"], data["ownerSaid"]),
-                         (UPLOADS, "1", None, None))
+                         (UPLOADS, "2", None, None))
         self.assertTrue(data["text"].strip())
         self.assertNotIn("sha", data["text"].lower())                            # plain words for the owner
         self.assertEqual(list(data["pictures"][0]), ["n", "role", "file", "path", "size", "bytes", "sha8", "matches",
@@ -2163,7 +2163,7 @@ class AnchorSmokeTests(ScriptCase):
         row = rows[0]
         self.assertEqual(list(row), MANIFEST_KEYS + ["anchor"])
         self.assertEqual(row["anchor"], {
-            "name": "closeup-v1", "wordsVersion": "1", "wordsSha256": words.data["wordsSha256"],
+            "name": "closeup-v1", "wordsVersion": "2", "wordsSha256": words.data["wordsSha256"],
             "cardSha256": shown.data["cardSha256"], "roles": ["place", "room"], "extra": 1})
         self.assertEqual(row["prompt"], request)
         self.assertEqual([item["name"] for item in row["refs"]],

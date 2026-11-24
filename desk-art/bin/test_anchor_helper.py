@@ -33,18 +33,21 @@ AGY_WRAPPER_TEXT = (
     "terminal commands and do not edit project files. If you can, also save a copy of each finished image into the "
     "./out folder of the current directory. When done, reply with one short sentence.\n\nREQUEST:\n")
 
-# The words of section 3.4 of the contract, written out as literals. A change to one word needs a decision.
+# The words of section 3.4 of the contract, written out as literals, with the first sentence reworded in 0.2.1
+# (words version 2). A change to one word needs a decision.
 GOLDEN_FIGURE = "\n".join([
-    "REQUEST says otherwise for the reference pictures. They are numbered in the order they are attached or listed. "
-    "Each has one job, given below: use each picture for that job only and take nothing else from it.",
+    "This REQUEST says otherwise: these notes, not the rule to keep the same character, outfit and art style, say "
+    "what to take from the reference pictures. They are numbered in the order they are attached or listed. Each has "
+    "one job, given below: use each picture for that job only and take nothing else from it.",
     "Picture 1 (identity): the character to keep. Keep the face, hair, eyes, outfit, colours, body proportions and "
     "drawing style exactly as drawn in it. Change only what the request below asks to change.",
     "Keep exactly: round lenses dark olive green; suit muted beige; tie mustard yellow with dark spots; "
     "shoes dark brown."])
 
 GOLDEN_CLOSEUP = "\n".join([
-    "REQUEST says otherwise for the reference pictures. They are numbered in the order they are attached or listed. "
-    "Each has one job, given below: use each picture for that job only and take nothing else from it.",
+    "This REQUEST says otherwise: these notes, not the rule to keep the same character, outfit and art style, say "
+    "what to take from the reference pictures. They are numbered in the order they are attached or listed. Each has "
+    "one job, given below: use each picture for that job only and take nothing else from it.",
     "Picture 1 (place): the exact view to paint. Paint this same view again: the same objects, in the same places, "
     "at the same sizes and angles, from the same camera position. Do not move, turn, add or remove an object. "
     "Change only what the request below asks to change.",
@@ -54,8 +57,9 @@ GOLDEN_CLOSEUP = "\n".join([
     "Picture 3 is extra: the request below says how to use it."])
 
 GOLDEN_HOUR = "\n".join([
-    "REQUEST says otherwise for the reference pictures. They are numbered in the order they are attached or listed. "
-    "Each has one job, given below: use each picture for that job only and take nothing else from it.",
+    "This REQUEST says otherwise: these notes, not the rule to keep the same character, outfit and art style, say "
+    "what to take from the reference pictures. They are numbered in the order they are attached or listed. Each has "
+    "one job, given below: use each picture for that job only and take nothing else from it.",
     "Picture 1 (place): the exact view to paint. Paint this same view again: the same objects, in the same places, "
     "at the same sizes and angles, from the same camera position. Do not move, turn, add or remove an object. "
     "Change only what the request below asks to change.",
@@ -63,8 +67,9 @@ GOLDEN_HOUR = "\n".join([
     "changes: keep every object of picture 1 where it is, and do not copy what this picture shows."])
 
 GOLDEN_STYLE = "\n".join([
-    "REQUEST says otherwise for the reference pictures. They are numbered in the order they are attached or listed. "
-    "Each has one job, given below: use each picture for that job only and take nothing else from it.",
+    "This REQUEST says otherwise: these notes, not the rule to keep the same character, outfit and art style, say "
+    "what to take from the reference pictures. They are numbered in the order they are attached or listed. Each has "
+    "one job, given below: use each picture for that job only and take nothing else from it.",
     "Picture 1 (style): copy only how it is drawn: the painting style, the colours and how strong they are, the "
     "lighting, the line weight, the shading and the level of detail. Do not copy what it shows: not its subject, "
     "objects, clothes, pose, composition or backdrop.",
@@ -319,7 +324,7 @@ class AnchorWordsTests(AnchorMixin):
         self.assertEqual(desk_art.ANCHOR_SCOPE_WORDS,
                          ("swim", "bikini", "underwear", "lingerie", "towel", "bath", "onsen", "sauna", "pool", "beach",
                           "pyjama", "pajama", "romance pose", "ask for a pose", "pose ladder", "outfits"))
-        self.assertEqual(desk_art.ANCHOR_WORDS_VERSION, "1")
+        self.assertEqual(desk_art.ANCHOR_WORDS_VERSION, "2")
         self.assertEqual(desk_art.ANCHOR_NOW_MAKE, "\n\nNOW MAKE:\n")
         self.assertEqual((desk_art.ANCHOR_FORMAT, desk_art.ANCHOR_DIR_NAME, desk_art.ANCHOR_CARD_NAME),
                          (1, "anchors", "anchor.json"))
@@ -354,6 +359,18 @@ class AnchorWordsTests(AnchorMixin):
         self.make("one-v1", roles=("identity",), keep=KEEP_FIGURE)
         last = desk_art.anchor_block(self.load("one-v1"), 3).split("\n")[-1]
         self.assertEqual(last, GOLDEN_EXTRAS_LINE)
+
+    def test_the_intro_answers_both_wrappers_in_their_own_words(self):
+        # Both wrappers say "keep the same character, outfit and art style unless REQUEST says otherwise". The
+        # block's first sentence is that "otherwise": it names the same rule, as a whole sentence (words version 1
+        # began "REQUEST says otherwise for ...", which read like the end of a cut sentence).
+        rule = "keep the same character, outfit and art style"
+        for wrapper in (WRAPPER_TEXT, AGY_WRAPPER_TEXT, desk_art.CODEX_WRAPPER, desk_art.AGY_WRAPPER):
+            self.assertIn(rule + " unless REQUEST says otherwise.", wrapper)
+        first = desk_art.ANCHOR_INTRO.split(". ")[0]
+        self.assertTrue(first.startswith("This REQUEST says otherwise: "), first)
+        self.assertIn("not the rule to " + rule + ",", first)
+        self.assertTrue(first.endswith("say what to take from the reference pictures"), first)
 
     def test_the_place_picture_is_named_by_its_position(self):
         self.make("third-v1", roles=("style", "place", "room"), keep="")
@@ -411,12 +428,12 @@ class AnchorWordsTests(AnchorMixin):
         anchor = self.load("parts-v1")
         words = hashlib.sha256(desk_art.anchor_block(anchor, 2).encode("ascii")).hexdigest()
         self.assertEqual(desk_art.anchor_answer(anchor, 2), {
-            "name": "parts-v1", "wordsVersion": "1", "wordsSha256": words, "cardSha256": self.card_sha(folder),
+            "name": "parts-v1", "wordsVersion": "2", "wordsSha256": words, "cardSha256": self.card_sha(folder),
             "pictures": [{"n": 1, "role": "identity", "name": "parts-v1/01_identity.png", "sha8": shas[0][:8]},
                          {"n": 2, "role": "place", "name": "parts-v1/02_place.png", "sha8": shas[1][:8]}],
             "extra": 2})
         self.assertEqual(desk_art.anchor_manifest(anchor, 2), {
-            "name": "parts-v1", "wordsVersion": "1", "wordsSha256": words, "cardSha256": self.card_sha(folder),
+            "name": "parts-v1", "wordsVersion": "2", "wordsSha256": words, "cardSha256": self.card_sha(folder),
             "roles": ["identity", "place"], "extra": 2})
         self.assertEqual(list(desk_art.anchor_answer(anchor, 0).keys()),
                          ["name", "wordsVersion", "wordsSha256", "cardSha256", "pictures", "extra"])
@@ -541,7 +558,7 @@ class AnchorCodexTests(AnchorMixin):
         self.assertEqual(call["argv"], codex_argv(self.work_of(result.data), *call["images"]))
         words = hashlib.sha256(GOLDEN_CLOSEUP.encode("ascii")).hexdigest()
         self.assertEqual(result.data["anchor"], {
-            "name": name, "wordsVersion": "1", "wordsSha256": words, "cardSha256": self.card_sha(folder),
+            "name": name, "wordsVersion": "2", "wordsSha256": words, "cardSha256": self.card_sha(folder),
             "pictures": [{"n": 1, "role": "place", "name": name + "/01_place.png", "sha8": shas[0][:8]},
                          {"n": 2, "role": "room", "name": name + "/02_room.png", "sha8": shas[1][:8]}],
             "extra": 1})
@@ -562,7 +579,7 @@ class AnchorCodexTests(AnchorMixin):
         (row,) = self.sb.manifest()
         self.assertEqual(list(row.keys()), MANIFEST_KEYS + ["anchor"])
         self.assertEqual(row["anchor"], {
-            "name": name, "wordsVersion": "1",
+            "name": name, "wordsVersion": "2",
             "wordsSha256": hashlib.sha256(GOLDEN_CLOSEUP.encode("ascii")).hexdigest(),
             "cardSha256": self.card_sha(folder), "roles": ["place", "room"], "extra": 1})
         self.assertEqual(row["prompt"], prompt)                                 # the caller's words only
@@ -635,7 +652,7 @@ class AnchorCodexTests(AnchorMixin):
         result = self.anchored(name, extras=[extra], env={"FAKE_CODEX_MODE": "refusal"})
         self.assertEqual((result.code, result.data["code"]), (2, "codex-no-images"), result.out)
         self.assertEqual(result.data["anchor"], {
-            "name": name, "wordsVersion": "1",
+            "name": name, "wordsVersion": "2",
             "wordsSha256": desk_art.sha256_text(desk_art.anchor_block(desk_art.load_anchor(self.sb.inbox, name), 1)),
             "cardSha256": self.card_sha(folder),
             "pictures": [{"n": 1, "role": "identity", "name": name + "/01_identity.png", "sha8": shas[0][:8]},
@@ -771,7 +788,7 @@ class AnchorAgyTests(AnchorMixin):
         self.assertEqual((result.code, result.data["code"]), (2, "agy-no-images"), result.out)
         anchor = desk_art.load_anchor(self.sb.inbox, name)
         self.assertEqual(result.data["anchor"], {
-            "name": name, "wordsVersion": "1", "wordsSha256": desk_art.sha256_text(desk_art.anchor_block(anchor, 1)),
+            "name": name, "wordsVersion": "2", "wordsSha256": desk_art.sha256_text(desk_art.anchor_block(anchor, 1)),
             "cardSha256": self.card_sha(folder),
             "pictures": [{"n": 1, "role": "identity", "name": name + "/01_identity.png", "sha8": shas[0][:8]},
                          {"n": 2, "role": "style", "name": name + "/02_style.png", "sha8": shas[1][:8]}],
@@ -1145,14 +1162,14 @@ class AnchorMiscTests(AnchorMixin):
         self.assertEqual(tree_snapshot(anchors), changed)
 
     def test_helper_version_matches_the_plugin(self):
-        self.assertEqual(desk_art.VERSION, "0.2.0")
+        self.assertEqual(desk_art.VERSION, "0.2.1")
         with open(os.path.join(HERE, "..", ".claude-plugin", "plugin.json"), encoding="utf-8") as handle:
             self.assertEqual(json.load(handle)["version"], desk_art.VERSION)
         top = self.cli("--help").data
         self.assertIn("desk-art helper %s." % desk_art.VERSION, " ".join(top["help"].split()))
         with open(os.path.join(HERE, "desk_art.py"), encoding="utf-8") as handle:
             lines = handle.read().split("\n")
-        self.assertEqual(lines[1], '"""desk-art helper, version 0.2.0.')
+        self.assertEqual(lines[1], '"""desk-art helper, version 0.2.1.')
         self.assertIn("codex and agy also take --anchor NAME (a saved anchor set in <inbox>/anchors).", lines[:15])
 
     def test_codex_and_agy_list_anchor_in_their_help_and_nothing_else_does(self):

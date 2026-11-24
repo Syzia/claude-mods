@@ -1,6 +1,6 @@
 # desk-art
 
-Version 0.2.0
+Version 0.2.1
 
 desk-art is a Claude Code mod. It lets Claude make character art with image programs that are already on your Mac and already signed in. You do not need an API key: each program uses your own sign-in. It does not use web-browser generators such as Grok in a browser.
 
@@ -124,7 +124,7 @@ What it cannot do: the generator still draws the picture. The same words given t
 ### What to know before you trust it
 
 - UNVERIFIED: no real run has yet compared a saved set with doing the same job by hand. A set is meant to reduce drift (a picture wandering away from the original), not to remove it, because the same words scored 6.2 on one run and 7.4 on another; if the test fails, sets stay optional for that kind of picture.
-- The first sentence of the fixed words tells the generator to use each picture for its one job only. It is meant to stop a "look to copy" picture from lending its subject to the new picture, but no run has shown that it does (only backgrounds were tried as looks to copy), so a character picture is not supported as a look to copy.
+- The fixed words begin by telling the generator to use each picture for its one job only. It is meant to stop a "look to copy" picture from lending its subject to the new picture, but no run has shown that it does (only backgrounds were tried as looks to copy), so a character picture is not supported as a look to copy.
 - Stored pictures are plain, with nothing see-through: a see-through picture is first flattened onto a flat background colour, and a colour profile (a note that says how to read the colours) is left out, which is right for your art because your art has none. How Codex, Antigravity and the Gemini app treat see-through parts of a reference picture is not documented.
 - A set holds three pictures at most, and one call carries six in all (the set plus any extra pictures). Up to three pictures in a call is the range that has been tried (only 1 of 111 earlier jobs used three); four to six are untested, and Codex documents no maximum.
 - Antigravity's default picture model may be a "Lite" one, which Google says is not built for several reference pictures, so use a set of one character picture there. In the Gemini app pick the Pro or Flash model, not Flash-Lite; that route is done by hand and sits outside every automatic check.
@@ -225,6 +225,12 @@ Installing the mod added one line to your Claude plugin list. The mod itself doe
 | The picture is the wrong shape. | The generator may not follow the shape exactly. Ask again and say the shape in the prompt. |
 | You cannot find a picture. | Type `/desk-art` to see the inbox path. Look in the folder for today's date. Search `manifest.jsonl` for your label. |
 | A message that says `helper failed` | Paste the whole message to Claude. It is a problem with the helper program, not with your pictures. If it says the answer was cut, look in the inbox: the pictures may still be filed. |
+
+## Changes in 0.2.1
+
+- The fixed words that go with an anchor set now start with a whole sentence. They used to start "REQUEST says otherwise for the reference pictures.", which reads like the end of a cut sentence. It was written that way on purpose, as the answer to the generator's standing instruction "keep the same character, outfit and art style unless REQUEST says otherwise", but it did not say so. It now reads: "This REQUEST says otherwise: these notes, not the rule to keep the same character, outfit and art style, say what to take from the reference pictures." The rest of the words are unchanged. Seen on 24 Nov 2026, in the first real run with a set (the game's My Room).
+- The words version is now 2. Results and notes-file (manifest.jsonl) lines made before this say words version 1, which means the old first sentence, so they stay true. Saved sets need nothing: a set holds pictures and a keep line, not these words.
+- A Claude session that was already open keeps the old words (version 1) until it is restarted.
 
 ## Changes in 0.2.0
 

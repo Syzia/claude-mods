@@ -143,7 +143,7 @@ One exception to "no names". Codex gets no file names, only its pictures in orde
 ## What is still unproven
 
 - Whether a set beats the plain way (one reference picture in `refs`). The live proof in `proof-protocol.md` has not been run.
-- Whether the set's first sentence stops a style picture's subject from being copied (see `style`).
+- Whether the set's opening words stop a style picture's subject from being copied (see `style`).
 - How many pictures help. Of 111 earlier jobs, one used three reference pictures. Up to three in a call is the tested range; four to six are untested.
 - Antigravity's default picture model may be a "Lite" one, which Google says is not built for several reference pictures: use one identity picture there. In the Gemini app pick Pro or Flash, not Flash-Lite. The Gemini app route is by hand and outside every automatic check.
 - Whether a head made by a generator joins the game's body cleanly (`head`).

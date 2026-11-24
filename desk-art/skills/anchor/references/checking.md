@@ -6,7 +6,7 @@ Use this after a picture comes back from a set. The rule behind all of it: compa
 
 The result must show `References sent to ...` and `Anchor set <name> sent to ...` with the roles you meant; the manifest row has an `anchor` key. If the line is missing, the call did not use the set: say so and do not count the picture as evidence.
 
-The second line looks like this: `Anchor set nanami-final-v1 sent to OpenAI: picture 1 identity (9f2c0a1b); 1 extra picture after the set. Words version 1.` The eight characters in brackets are each picture's short fingerprint. They must match the `sha8` that `build` or `show` printed for that picture.
+The second line looks like this: `Anchor set nanami-final-v1 sent to OpenAI: picture 1 identity (9f2c0a1b); 1 extra picture after the set. Words version 2.` The eight characters in brackets are each picture's short fingerprint. They must match the `sha8` that `build` or `show` printed for that picture.
 
 ## 2. Look
 

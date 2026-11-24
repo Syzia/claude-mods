@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""desk-art helper, version 0.2.0.
+"""desk-art helper, version 0.2.1.
 
 Files pictures made by image generators that are already installed and signed
 in on this Mac (Codex, the Antigravity CLI, the Gemini app) into one inbox
@@ -47,7 +47,7 @@ import traceback
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 # ---------------------------------------------------------------------------
 # Limits and fixed texts
@@ -1185,7 +1185,7 @@ def refs_sent(staged: List[Staged]) -> List[Dict[str, Any]]:
 # "block", built here from the card and never taken from the caller) in front of the caller's prompt.
 
 ANCHOR_FORMAT = 1
-ANCHOR_WORDS_VERSION = "1"
+ANCHOR_WORDS_VERSION = "2"
 ANCHOR_DIR_NAME = "anchors"
 ANCHOR_CARD_NAME = "anchor.json"
 ANCHOR_CARD_MAX_BYTES = 64 * 1024
@@ -1204,9 +1204,13 @@ ANCHOR_PLAIN_RE = re.compile(r"[ -~]*")                  # printable ASCII only:
 ANCHOR_LIST_MAX = 100                                    # sets named by saved_anchor_names
 ANCHOR_HINT_NAMES = 10                                   # sets named in the hint of a missing set
 
+# The first sentence answers the generator wrappers' own rule, "keep the same character, outfit and art style
+# unless REQUEST says otherwise", in their words. Words version 1 (0.2.0) began with a bare "REQUEST says otherwise
+# for the reference pictures.", which read like the end of a cut sentence.
 ANCHOR_INTRO = (
-    "REQUEST says otherwise for the reference pictures. They are numbered in the order they are attached or "
-    "listed. Each has one job, given below: use each picture for that job only and take nothing else from it.")
+    "This REQUEST says otherwise: these notes, not the rule to keep the same character, outfit and art style, say "
+    "what to take from the reference pictures. They are numbered in the order they are attached or listed. Each "
+    "has one job, given below: use each picture for that job only and take nothing else from it.")
 
 ANCHOR_ROLE_TEXT = {
     "identity": (
