@@ -1,1 +1,1 @@
-{ "name": "crab-buddy", "version": "0.4.0", "author": {"name": "Hunter"}, "description": "A little pixel crab that floats on your desktop, shows when Claude is working, and takes you to Claude when clicked.", "types": "./types/index.d.ts" }
+{ "name": "crab-buddy", "version": "0.5.0", "author": {"name": "Hunter"}, "description": "A little pixel crab that floats on your desktop, shows when Claude is working, and takes you to Claude when clicked.", "types": "./types/index.d.ts" }

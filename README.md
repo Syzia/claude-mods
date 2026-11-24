@@ -21,7 +21,7 @@ A private copy is on GitHub, in your account: https://github.com/Syzia/claude-mo
 Kept in the history and on GitHub: the code and sounds of every mod, `office-app/save.json` (your office's money, furniture and outfits), and these notes.
 Not kept: `office-feed` (the live snapshots hold task text and paths), `node_modules` (`npm install` brings it back) and the type files that Claude Code lays into a mod's folder itself.
 
-When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1`, `desk-art-v0.2.1`, `screen-light-v0.2.1` and `crab-buddy-v0.4.0`.
+When Claude changes a mod here, it saves a new step and sends it to GitHub. The office's save is only backed up when a step is saved, not while you play. The versions are marked: `agent-office-v0.3.1`, `desk-art-v0.2.1`, `screen-light-v0.2.1` and `crab-buddy-v0.5.0`.
 
 To look at it, type these in Terminal:
 1. The steps so far: `git -C ~/claude-mods log --oneline`

@@ -125,9 +125,16 @@ enum Settings {
 
     static var size: String {
         get { defaults.string(forKey: "size") ?? "medium" }
-        set { defaults.set(newValue, forKey: "size") }
+        set { defaults.set(newValue, forKey: "size"); knownUnit = nil }
     }
-    static var unit: CGFloat { sizes.first { $0.key == size }?.unit ?? 2.5 }
+    /// Asked for many times a frame, so looked up once.
+    static var unit: CGFloat {
+        if let unit = knownUnit { return unit }
+        let unit = sizes.first { $0.key == size }?.unit ?? 2.5
+        knownUnit = unit
+        return unit
+    }
+    static var knownUnit: CGFloat?
     static var hasSounds: Bool {
         get { defaults.bool(forKey: "sounds") }
         set { defaults.set(newValue, forKey: "sounds") }
@@ -260,6 +267,8 @@ struct Pose {
     var legPhase = 0.0, scuttle = 0.0, air = 0.0
     var dangle = 0.0                  // 1 while picked up: the legs hang
     var mouth = Mouth.smile
+    var hat = "", neck = "", glasses = ""   // what he wears
+    var feeling = ""                       // a feeling that marks his face
 }
 
 enum Paint {
@@ -390,14 +399,16 @@ func renderCrab(_ c: Canvas, _ p: Pose) {
         for dx in -2...1 { c.dot(fx + dx, my, Paint.eye, on: bodyPart) }
         c.dot(fx - 1, my + 1, Paint.tongue, on: bodyPart); c.dot(fx, my + 1, Paint.tongue, on: bodyPart)
     }
+
+    drawExtras(c, p, fx: fx, top: top, faceRow: faceRow)
 }
 
 // MARK: - Layers
 
 /// A few pixels of pixel art (a "z", a sparkle, a "!") with a dark drop shadow so it reads on any wallpaper.
 final class GlyphLayer: CALayer {
-    private let shadow = CAShapeLayer(), fill = CAShapeLayer()
-    private var shown = ""
+    let shadow = CAShapeLayer(), fill = CAShapeLayer()
+    var shown = ""
 
     init(color: NSColor, pixelScale: CGFloat) {
         super.init()
@@ -443,6 +454,7 @@ final class CrabView: NSView {
     }
 
     let canvas = Canvas(w: artW, h: artH)
+    let extras = Extras()   // feelings, dreams, the ask bar, his wardrobe
 
     var status = Status() {
         didSet {
@@ -460,31 +472,31 @@ final class CrabView: NSView {
     /// Where the crab lives; it wanders around this and comes back to it.
     var home: NSPoint = .zero
 
-    private var t = 0.0
-    private var wWork = 0.0, wHappy = 0.0, wSleep = 1.0, wHover = 0.0, wAlert = 0.0, wSad = 0.0
-    private var wHeld = 0.0, wWalk = 0.0, wPill = 0.0
-    private var doneStart = -100.0, sadStart = -100.0
-    private var squash = 0.0, squashV = 0.0   // a little spring, poked by clicks
-    private var swing = 0.0, swingV = 0.0     // how far he swings while carried
-    private var dragSpeed = 0.0
-    private var legPhase = 0.0
-    private var lookX = 0, lookY = 0
-    private var isHovering = false, isHeld = false
-    private var pillIcon = PillIcon.none
-    private var pillLabel = ""
-    private var walkTarget: CGFloat?
-    private var nextWalkAt = 14.0
+    var t = 0.0
+    var wWork = 0.0, wHappy = 0.0, wSleep = 1.0, wHover = 0.0, wAlert = 0.0, wSad = 0.0
+    var wHeld = 0.0, wWalk = 0.0, wPill = 0.0
+    var doneStart = -100.0, sadStart = -100.0
+    var squash = 0.0, squashV = 0.0   // a little spring, poked by clicks
+    var swing = 0.0, swingV = 0.0     // how far he swings while carried
+    var dragSpeed = 0.0
+    var legPhase = 0.0
+    var lookX = 0, lookY = 0
+    var isHovering = false, isHeld = false
+    var pillIcon = PillIcon.none
+    var pillLabel = ""
+    var walkTarget: CGFloat?
+    var nextWalkAt = 14.0
 
-    private var downScreenPoint: NSPoint = .zero
-    private var downOrigin: NSPoint = .zero
-    private var lastDragX: CGFloat = 0
-    private var lastDragAt = 0.0
+    var downScreenPoint: NSPoint = .zero
+    var downOrigin: NSPoint = .zero
+    var lastDragX: CGFloat = 0
+    var lastDragAt = 0.0
 
     /// Points per art pixel, snapped so one art pixel is a whole number of screen pixels.
-    private var unit: CGFloat { (Settings.unit * backing).rounded() / backing }
-    private var backing: CGFloat { window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2 }
+    var unit: CGFloat { (Settings.unit * backing).rounded() / backing }
+    var backing: CGFloat { window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2 }
 
-    private var spriteRect: NSRect {
+    var spriteRect: NSRect {
         let size = NSSize(width: CGFloat(Self.artW) * unit, height: CGFloat(Self.artH) * unit)
         return NSRect(origin: NSPoint(x: (bounds.width - size.width) / 2, y: Self.pillSpace), size: size)
     }
@@ -501,7 +513,7 @@ final class CrabView: NSView {
     override func mouseEntered(with event: NSEvent) { isHovering = true }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
-    private func play(_ sound: String) {
+    func play(_ sound: String) {
         if Settings.hasSounds { NSSound(named: sound)?.play() }
     }
 
@@ -512,7 +524,7 @@ final class CrabView: NSView {
     var frameInterval: Double {
         let weights = [wWork, wHappy, wHover, wAlert, wSad, wHeld, wWalk, wPill]
         let isSettled = weights.allSatisfy { $0 < 0.01 } && abs(squash) < 0.004 && abs(swing) < 0.004
-        guard isSettled else { return 0 }
+        guard isSettled, extras.isQuiet else { return 0 }
         return wSleep > 0.99 ? 1.0 / 20 : wSleep < 0.01 ? 1.0 / 30 : 0
     }
 
@@ -535,9 +547,9 @@ final class CrabView: NSView {
         case .done: pillIcon = .check; pillLabel = "Done"
         case .failed: pillIcon = .cross; pillLabel = status.label
         case .stopped: pillIcon = .stop; pillLabel = "Stopped"
-        case .awake, .asleep: if isHovering { pillIcon = .none; pillLabel = "Open Claude" }
+        case .awake, .asleep: break   // hovering brings out the ask bar instead
         }
-        let showsPill = mood.rawValue >= Mood.stopped.rawValue || isHovering
+        let showsPill = mood.rawValue >= Mood.stopped.rawValue
         wPill += ((showsPill ? 1 : 0) - wPill) * (1 - exp(-dt * 10))
 
         squashV += (-260 * squash - 16 * squashV) * dt
@@ -551,11 +563,12 @@ final class CrabView: NSView {
 
         watchPointer()
         wander(dt)
+        extras.step(dt, self)
         render()
     }
 
     /// The eyes follow the pointer while he has nothing else to look at.
-    private func watchPointer() {
+    func watchPointer() {
         guard let window = window else { return }
         let mouse = NSEvent.mouseLocation
         let centre = NSPoint(x: window.frame.minX + spriteRect.midX, y: window.frame.minY + spriteRect.midY)
@@ -567,7 +580,7 @@ final class CrabView: NSView {
     }
 
     /// Now and then, with nothing to do, he scuttles a little way along and back.
-    private func wander(_ dt: Double) {
+    func wander(_ dt: Double) {
         guard let window = window else { return }
         let isFree = Settings.wanders && status.mood == .awake && !isHovering && !isHeld
         if !isFree { walkTarget = nil; nextWalkAt = max(nextWalkAt, t + 8) }
@@ -591,7 +604,7 @@ final class CrabView: NSView {
         wWalk += ((walkTarget != nil ? 1 : 0) - wWalk) * (1 - exp(-dt * 9))
     }
 
-    private func currentPose() -> (pose: Pose, hop: Double, lean: Double) {
+    func currentPose() -> (pose: Pose, hop: Double, lean: Double) {
         let tau = Double.pi * 2
         let since = t - doneStart
         let fade = exp(-since * 0.45)
@@ -669,32 +682,34 @@ final class CrabView: NSView {
         pose.scuttle = max(wWork, wWalk, wHeld * 0.6)
         pose.air = min(1, happyHop / 3) * wHappy
         pose.dangle = wHeld
-        return (pose, hop, lean)
+        var feltHop = hop, feltLean = lean
+        extras.adjust(&pose, &feltHop, &feltLean, self)
+        return (pose, feltHop, feltLean)
     }
 
     // MARK: layers
     // Everything on screen is a layer the GPU composites, so a frame costs almost nothing.
 
-    private let shadowA = CALayer(), shadowB = CALayer()
-    private let spriteLayer = CALayer()
-    private var lastPixels: [UInt32] = []
-    private var zLayers: [GlyphLayer] = []
-    private var sparkLayers: [GlyphLayer] = []
-    private var bangLayer: GlyphLayer!
-    private let pill = CALayer()
-    private let pillText = CATextLayer()
-    private var dots: [CALayer] = []
-    private let mark = CAShapeLayer()
-    private var shownLabel = "\u{0}"
-    private var shownIcon = PillIcon.none
-    private let pillHeight: CGFloat = 23
-    private let pillFont = NSFont.systemFont(ofSize: 11.5, weight: .medium)
+    let shadowA = CALayer(), shadowB = CALayer()
+    let spriteLayer = CALayer()
+    var lastPixels: [UInt32] = []
+    var zLayers: [GlyphLayer] = []
+    var sparkLayers: [GlyphLayer] = []
+    var bangLayer: GlyphLayer!
+    let pill = CALayer()
+    let pillText = CATextLayer()
+    var dots: [CALayer] = []
+    let mark = CAShapeLayer()
+    var shownLabel = "\u{0}"
+    var shownIcon = PillIcon.none
+    let pillHeight: CGFloat = 23
+    let pillFont = NSFont.systemFont(ofSize: 11.5, weight: .medium)
 
-    private static let orange = CGColor(srgbRed: 0.94, green: 0.60, blue: 0.47, alpha: 1)
-    private static let green = CGColor(srgbRed: 0.36, green: 0.82, blue: 0.54, alpha: 1)
-    private static let red = CGColor(srgbRed: 0.96, green: 0.42, blue: 0.40, alpha: 1)
-    private static let amber = CGColor(srgbRed: 1.0, green: 0.72, blue: 0.22, alpha: 1)
-    private static let grey = CGColor(gray: 0.62, alpha: 1)
+    static let orange = CGColor(srgbRed: 0.94, green: 0.60, blue: 0.47, alpha: 1)
+    static let green = CGColor(srgbRed: 0.36, green: 0.82, blue: 0.54, alpha: 1)
+    static let red = CGColor(srgbRed: 0.96, green: 0.42, blue: 0.40, alpha: 1)
+    static let amber = CGColor(srgbRed: 1.0, green: 0.72, blue: 0.22, alpha: 1)
+    static let grey = CGColor(gray: 0.62, alpha: 1)
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -720,6 +735,7 @@ final class CrabView: NSView {
         }
         bangLayer = GlyphLayer(color: NSColor(srgbRed: 1.0, green: 0.72, blue: 0.22, alpha: 1), pixelScale: pixelScale)
         root.addSublayer(bangLayer)
+        extras.attach(to: root, pixelScale: pixelScale)
 
         pill.anchorPoint = .zero
         pill.backgroundColor = CGColor(gray: 0.11, alpha: 0.94)
@@ -753,13 +769,13 @@ final class CrabView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     /// A rectangle given in art pixels (y down), in view coordinates.
-    private func art(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> NSRect {
+    func art(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> NSRect {
         let o = spriteRect.origin
         return NSRect(x: o.x + CGFloat(x) * unit, y: o.y + (CGFloat(Self.artH) - CGFloat(y + h)) * unit,
                       width: CGFloat(w) * unit, height: CGFloat(h) * unit)
     }
 
-    private func render() {
+    func render() {
         let (pose, hop, lean) = currentPose()
         let dx = (CGFloat(lean) * unit * backing).rounded() / backing
         let dy = ((CGFloat(hop) * unit + CGFloat(wHeld) * 6) * backing).rounded() / backing
@@ -785,7 +801,7 @@ final class CrabView: NSView {
         spriteLayer.setAffineTransform(CGAffineTransform(rotationAngle: CGFloat(swing)))
 
         // zzz drifting up while asleep
-        let asleep = clamp((wSleep - 0.6) / 0.4, 0, 1)
+        let asleep = clamp((wSleep - 0.6) / 0.4, 0, 1) * (1 - extras.dreamAlpha)   // a dream takes their place
         let smallZ = ["###", ".#.", "###"]
         let mediumZ = ["####", "..#.", ".#..", "####"]
         let largeZ = ["#####", "...#.", "..#..", ".#...", "#####"]
@@ -836,10 +852,12 @@ final class CrabView: NSView {
             mark.opacity = pillIcon == .bang ? Float(0.65 + 0.35 * sin(t * 7)) : 1
         }
 
+        extras.render(self, hop: hop)
+
         CATransaction.commit()
     }
 
-    private func layoutPill() {
+    func layoutPill() {
         shownLabel = pillLabel
         shownIcon = pillIcon
         let label = pillLabel.count > 26 ? String(pillLabel.prefix(25)) + "…" : pillLabel
@@ -949,6 +967,9 @@ final class CrabView: NSView {
         }
 
         menu.addItem(withTitle: "Open Claude", action: #selector(menuOpen), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+
+        extras.addMenuItems(menu)
         menu.addItem(.separator())
 
         let sizeItem = menu.addItem(withTitle: "Size", action: nil, keyEquivalent: "")
@@ -1087,9 +1108,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)   // no Dock icon
-let delegate = AppDelegate()
-app.delegate = delegate
-app.run()

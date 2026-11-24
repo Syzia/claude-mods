@@ -1,35 +1,54 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const ENV: Record<string, string> = {
   HOME: '/home/me',
   CLAUDE_CODE_HOST_SESSION_ID: 'local_abc-123',
   CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/cc-socks/4242.sock',
 }
-const STATUS = '/home/me/.claude/crab-buddy/sessions/chat-1.json'
+const HOME = '/home/me/.claude/crab-buddy'
+const STATUS = `${HOME}/sessions/chat-1.json`
 
 // Nothing sits beneath the mod in a test, so these hooks stand for the engine:
 // they answer every call the mod makes and keep what it writes.
-const engine = (on: any) => {
-  const files: Record<string, string> = {}
+// `seed` is what is on disk already; `thought` is what the model answers.
+const engine = (on: any, seed: Record<string, string> = {}, thought = 'It is a crab.') => {
+  const files: Record<string, string> = { ...seed }
   const ran: string[][] = []
+  const prompts: string[] = []
+  // A clock that moves only when the test moves it: it answers `$.clock`.
+  const clock = mock.clock(on, { now: 1000 })
 
   on('env.get', (_: unknown, e: { name: string }) => ({ value: ENV[e.name] }))
   on('session.id', () => ({ value: 'chat-1' }))
   on('session.cwd', () => ({ value: '/work/my-project' }))
-  on('clock.now', () => ({ value: 1000 }))
   on('fs.write', (_: unknown, e: { path: string; text: string }) => {
     files[e.path] = e.text
 
     return { value: undefined }
   })
-  on('fs.read', () => ({ value: '4' }))
+  on('fs.read', (_: unknown, e: { path: string }) => ({ value: files[e.path] ?? '4' }))
   on('fs.exists', () => ({ value: true }))
-  on('fs.list', () => ({ value: [] }))
+  on('fs.list', (_: unknown, e: { path: string }) => ({
+    value: Object.keys(files)
+      .filter(path => path.startsWith(`${e.path}/`) && !path.slice(e.path.length + 1).includes('/'))
+      .map(path => ({ name: path.slice(e.path.length + 1), kind: 'file', size: 1, mtimeMs: 1000, isLink: false })),
+  }))
   on('process.run', (_: unknown, e: { argv: string[] }) => {
     ran.push(e.argv)
 
-    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    return { value: { exitCode: 0, stdout: e.argv.includes('--ocr') ? 'EADDRINUSE: port 3000' : '', stderr: '' } }
   })
+  on('model.complete', (_: unknown, e: { prompt: string }) => {
+    prompts.push(String(e.prompt))
+
+    return { value: { isAnswered: true, text: thought, usage: {} } }
+  })
+  on('session.messages', () => ({
+    value: [
+      { role: 'user', text: 'Make login faster', toolUses: [] },
+      { role: 'assistant', text: 'Done: the token is fetched on every request.', toolUses: [] },
+    ],
+  }))
   on('command.register', (_: unknown, e: { name: string }) => ({ value: { command: e.name } }))
   on('ui.close', () => ({ value: undefined }))
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
@@ -40,6 +59,13 @@ const engine = (on: any) => {
   return {
     files,
     ran,
+    prompts,
+    // Two seconds on, the mod looks for asks; a moment later its claim has held.
+    look: async () => {
+      await clock.advance(2000)
+      await clock.advance(300)
+    },
+    answer: (id: string) => JSON.parse(files[`${HOME}/answers/${id}.json`] ?? 'null'),
     status: () => JSON.parse(files[STATUS] ?? '{}'),
   }
 }
@@ -136,4 +162,52 @@ test('/crab-away quiets the chat and /crab brings the crab back', async ($, on) 
   await command($, 'crab')
   expect(status()).toMatchObject({ state: 'idle' })
   expect(files['/home/me/.claude/crab-buddy/show']).toBe('')
+})
+
+const asked = (ask: Record<string, unknown>) => ({ [`${HOME}/asks/${ask.id}.json`]: JSON.stringify(ask) })
+
+test('a question about the screen is answered from what is on it', async ($, on) => {
+  const { answer, ran, prompts, files, look } = engine(
+    on,
+    asked({ id: 'q1', kind: 'ask', question: 'What is this error?', screen: true }),
+  )
+
+  await start($)
+  await look()
+  expect(answer('q1')).toMatchObject({ ok: true, text: 'It is a crab.', shot: `${HOME}/shots/q1.jpg` })
+  expect(files[`${HOME}/asks/q1.claim`]).toMatch(/^chat-1:/)
+  expect(ran).toContainEqual(['/usr/sbin/screencapture', '-x', '-t', 'jpg', `${HOME}/shots/q1.jpg`])
+  expect(prompts[0]).toContain('What is this error?')
+  expect(prompts[0]).toContain('EADDRINUSE: port 3000')
+})
+
+test('a question without the screen takes no picture, and one for another chat is left alone', async ($, on) => {
+  const { answer, ran, files, look } = engine(on, {
+    ...asked({ id: 'q2', kind: 'ask', question: 'Why is the sky blue?', screen: false }),
+    ...asked({ id: 'q3', kind: 'dream', question: '', screen: false, for: 'chat-2' }),
+  })
+
+  await start($)
+  await look()
+  expect(answer('q2')).toMatchObject({ ok: true, text: 'It is a crab.' })
+  expect(ran.some(argv => argv[0] === '/usr/sbin/screencapture')).toBe(false)
+  expect(answer('q3')).toBeNull()
+  expect(files[`${HOME}/asks/q3.claim`]).toBeUndefined()
+})
+
+test('a dream is an idea about this chat, and no idea is no answer', async ($, on) => {
+  const idea = engine(on, asked({ id: 'd1', kind: 'dream', question: '', screen: false, for: 'chat-1' }), 'Cache the token.')
+
+  await start($)
+  await idea.look()
+  expect(idea.answer('d1')).toMatchObject({ ok: true, text: 'Cache the token.' })
+  expect(idea.prompts[0]).toContain('Person: Make login faster')
+})
+
+test('a dream with nothing worth saying is not passed on', async ($, on) => {
+  const none = engine(on, asked({ id: 'd2', kind: 'dream', question: '', screen: false, for: 'chat-1' }), 'NONE')
+
+  await start($)
+  await none.look()
+  expect(none.answer('d2')).toMatchObject({ ok: false })
 })
